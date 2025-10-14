@@ -57,6 +57,22 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        chat: {
+          user: {
+            bg: "hsl(var(--chat-user-bg))",
+            fg: "hsl(var(--chat-user-fg))",
+          },
+          bot: {
+            bg: "hsl(var(--chat-bot-bg))",
+            fg: "hsl(var(--chat-bot-fg))",
+          },
+          input: {
+            bg: "hsl(var(--chat-input-bg))",
+          },
+        },
+      },
+      backgroundImage: {
+        'gradient-chat': 'linear-gradient(135deg, hsl(var(--chat-gradient-start)), hsl(var(--chat-gradient-end)))',
       },
       borderRadius: {
         lg: "var(--radius)",
