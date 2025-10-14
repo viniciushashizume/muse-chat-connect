@@ -1,12 +1,12 @@
+// src/components/chat/ChatContainer.tsx
+
 import { useState, useRef, useEffect } from "react";
 import { MessageBubble } from "./MessageBubble";
 import { MessageInput } from "./MessageInput";
 import { LoadingIndicator } from "./LoadingIndicator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Bot } from "lucide-react";
-
-// TODO: Replace this with your actual API endpoint
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api/chat";
+import { sendChatMessage } from "@/lib/api"; // Importe a função da API
 
 interface Message {
   id: string;
@@ -28,13 +28,11 @@ export const ChatContainer = () => {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
   const handleSendMessage = async (messageContent: string) => {
-    // Add user message to chat
     const userMessage: Message = {
       id: Date.now().toString(),
       content: messageContent,
@@ -45,35 +43,12 @@ export const ChatContainer = () => {
     setIsLoading(true);
 
     try {
-      // TODO: API Integration Point
-      // Uncomment this when your Python API is ready:
-      /*
-      const response = await fetch(API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ message: messageContent }),
-      });
+      // **CHAMADA REAL À API**
+      const assistantResponse = await sendChatMessage(messageContent);
 
-      if (!response.ok) {
-        throw new Error("Failed to get response from API");
-      }
-
-      const data = await response.json();
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: data.response,
-        role: "assistant",
-        timestamp: new Date(),
-      };
-      */
-
-      // MOCK RESPONSE for testing (remove this when API is ready)
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: `Você disse: "${messageContent}"\n\nEsta é uma resposta simulada. Quando conectar à API Python, vou processar sua mensagem usando RAG e retornar respostas reais baseadas em conhecimento.\n\n**Exemplo de código:**\n\`\`\`python\ndef process_rag_query(query: str) -> str:\n    # Your RAG logic here\n    return response\n\`\`\``,
+        content: assistantResponse,
         role: "assistant",
         timestamp: new Date(),
       };
