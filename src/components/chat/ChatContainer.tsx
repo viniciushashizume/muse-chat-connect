@@ -19,7 +19,7 @@ export const ChatContainer = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
-      content: "Olá! Sou seu assistente com RAG. Como posso ajudá-lo hoje?",
+      content: "Olá! Sou seu assistente do LABRIOT. Como posso ajudá-lo hoje?",
       role: "assistant",
       timestamp: new Date(),
     },
@@ -78,10 +78,7 @@ export const ChatContainer = () => {
               <Bot className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold">Assistente RAG</h1>
-              <p className="text-sm text-muted-foreground">
-                Powered by LLM + Retrieval-Augmented Generation
-              </p>
+              <h1 className="text-xl font-semibold">Assistente LABRIOT</h1>
             </div>
           </div>
         </div>
