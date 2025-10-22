@@ -1,95 +1,94 @@
+// src/pages/Challenges.tsx
 import { useState } from "react";
-import { Challenge } from "@/types/challenge";
+import { Challenge } from "@/types/challenge"; // Mantenha a definição do tipo
 import { ChallengeCard } from "@/components/challenges/ChallengeCard";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Code2, Bot } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/hooks/use-toast"; // useToast de hooks
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { generateChallenges } from "@/lib/api"; // Importe a função ajustada
+import { Skeleton } from "@/components/ui/skeleton"; // Importe Skeleton para loading state
 
-// Mock data - será substituído pela API RAG
-const mockChallenges: Challenge[] = [
-  {
-    id: "1",
-    title: "Conceitos básicos de React",
-    description: "Qual hook do React é usado para gerenciar estado em componentes funcionais?",
-    type: "multiple-choice",
-    difficulty: "easy",
-    options: [
-      { id: "a", text: "useEffect" },
-      { id: "b", text: "useState" },
-      { id: "c", text: "useContext" },
-      { id: "d", text: "useReducer" },
-    ],
-    correctOptionId: "b",
-  },
-  {
-    id: "2",
-    title: "Função de soma",
-    description: "Escreva uma função que retorna a soma de dois números.",
-    type: "code",
-    difficulty: "easy",
-    codeTemplate: "function soma(a, b) {\n  // Seu código aqui\n}",
-    expectedOutput: "soma(2, 3) === 5",
-  },
-];
 
 export default function Challenges() {
-  const [challenges, setChallenges] = useState<Challenge[]>(mockChallenges);
+  const [challenges, setChallenges] = useState<Challenge[]>([]); // Começa vazio
   const [isLoading, setIsLoading] = useState(false);
   const [selectedArea, setSelectedArea] = useState<"software" | "robotica">("software");
   const { toast } = useToast();
 
-  // Função que será integrada com a API RAG para gerar novos desafios
   const generateNewChallenges = async () => {
     setIsLoading(true);
-    
-    // TODO: Integrar com API RAG
-    // const response = await fetch(API_URL + '/generate-challenges', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ area: selectedArea }),
-    // });
-    // const newChallenges = await response.json();
-    // setChallenges(newChallenges);
-    
-    // Simulação temporária
-    setTimeout(() => {
+    setChallenges([]); // Limpa desafios anteriores ao gerar novos
+
+    try {
+      // generateChallenges agora retorna a estrutura { challenge: Challenge } ou { challenge: ErrorChallenge }
+      const response = await generateChallenges(selectedArea);
+      const challengeResponse = response.challenge; // Pega o objeto dentro da resposta
+
+      // Verifica se a resposta NÃO é um erro antes de tentar usá-la como desafio
+      if (challengeResponse && typeof challengeResponse === 'object' && challengeResponse.type !== 'error') {
+          // Como a API agora retorna um único objeto challenge, colocamos ele em um array
+          setChallenges([challengeResponse as Challenge]); // Faz um type assertion aqui
+           toast({
+              title: "Novo desafio gerado!",
+              description: `Desafio de ${selectedArea} carregado da API.`,
+            });
+      } else if (challengeResponse && challengeResponse.type === 'error') {
+          // Se a API retornou um JSON de erro estruturado
+           toast({
+              title: challengeResponse.title || "Erro ao gerar desafio",
+              description: challengeResponse.description || "Não foi possível gerar o desafio.",
+              variant: "destructive",
+            });
+           setChallenges([]); // Garante que não haja desafios
+      }
+       else {
+         // Caso inesperado (não deveria acontecer se o backend estiver correto)
+         console.error("Resposta inesperada da API:", challengeResponse);
+         toast({
+            title: "Erro inesperado",
+            description: "A API retornou um formato desconhecido.",
+            variant: "destructive",
+          });
+         setChallenges([]);
+      }
+
+    } catch (error) {
+      console.error("Falha ao gerar desafios:", error);
       toast({
-        title: "Novos desafios gerados!",
-        description: `Desafios de ${selectedArea} serão gerados pela API RAG.`,
+        title: "Erro ao gerar desafios",
+        description: "Não foi possível conectar à API ou ocorreu um erro no servidor.",
+        variant: "destructive",
       });
+      setChallenges([]); // Garante que não haja desafios antigos em caso de erro
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const handleSubmitAnswer = (challengeId: string, answer: string) => {
-    // TODO: Integrar com API RAG para validar resposta
-    // const response = await fetch(API_URL + '/validate-challenge', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ challengeId, answer }),
-    // });
-    // const validation = await response.json();
-    
-    // Validação temporária mock
-    setChallenges((prev) =>
-      prev.map((c) => {
-        if (c.id === challengeId) {
-          const isCorrect = c.type === "multiple-choice" 
-            ? answer === c.correctOptionId
-            : answer.includes("return a + b"); // Validação simples para código
-          
-          return { ...c, userAnswer: answer, isCorrect, completed: true };
-        }
-        return c;
-      })
-    );
+      // TODO: Integrar com API RAG para validar resposta
+      // Por enquanto, apenas marca como completo e exibe mensagem
+      console.log("Submit:", challengeId, answer); // Apenas para debug
+       setChallenges((prev) =>
+          prev.map((c) => {
+            if (c.id === challengeId) {
+              // Simula uma validação simples para UI - REMOVER QUANDO TIVER API DE VALIDAÇÃO
+              const isCorrect = c.type === "multiple-choice"
+                ? answer === c.correctOptionId
+                : answer.includes("return"); // Validação muito básica para código
 
-    toast({
-      title: "Resposta submetida!",
-      description: "Validação com API RAG será implementada em breve.",
-    });
-  };
+              return { ...c, userAnswer: answer, isCorrect, completed: true };
+            }
+            return c;
+          })
+        );
+      toast({
+        title: "Resposta submetida!",
+        description: "Validação com API RAG será implementada em breve.",
+      });
+    };
+
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-background to-muted/20">
@@ -101,7 +100,7 @@ export default function Challenges() {
                 Desafios de Aprendizado
               </h1>
               <p className="text-sm text-muted-foreground">
-                Gerados automaticamente por IA
+                Gerados automaticamente por IA com base nos documentos
               </p>
             </div>
             <Button onClick={generateNewChallenges} disabled={isLoading}>
@@ -110,7 +109,7 @@ export default function Challenges() {
             </Button>
           </div>
 
-          <Tabs value={selectedArea} onValueChange={(value) => setSelectedArea(value as "software" | "robotica")} className="w-full">
+           <Tabs value={selectedArea} onValueChange={(value) => setSelectedArea(value as "software" | "robotica")} className="w-full">
             <TabsList className="grid w-full max-w-md grid-cols-2">
               <TabsTrigger value="software" className="flex items-center gap-2">
                 <Code2 className="h-4 w-4" />
@@ -127,20 +126,26 @@ export default function Challenges() {
 
       <main className="flex-1 overflow-auto">
         <div className="container py-8 px-4">
-          <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
-            {challenges.map((challenge) => (
-              <ChallengeCard
-                key={challenge.id}
-                challenge={challenge}
-                onSubmit={handleSubmitAnswer}
-              />
-            ))}
-          </div>
-
-          {challenges.length === 0 && (
+          {isLoading ? (
+              <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
+                {/* Mostra um ou dois skeletons dependendo do layout */}
+                <Skeleton className="h-72 w-full rounded-lg" />
+                <Skeleton className="h-72 w-full rounded-lg hidden lg:block" />
+              </div>
+           ) : challenges.length > 0 ? (
+              <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
+                {challenges.map((challenge) => (
+                  <ChallengeCard
+                    key={challenge.id}
+                    challenge={challenge}
+                    onSubmit={handleSubmitAnswer}
+                  />
+                ))}
+              </div>
+          ) : (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <p className="text-muted-foreground mb-4">
-                Nenhum desafio disponível. Clique em "Gerar Novos Desafios" para começar!
+                Nenhum desafio disponível para "{selectedArea}". Clique em "Gerar Novos Desafios" para começar!
               </p>
             </div>
           )}

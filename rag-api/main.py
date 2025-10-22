@@ -36,17 +36,12 @@ except Exception as e:
     print(f"Erro ao carregar o modelo de embedding: {e}")
     exit()
 
-# LLM do Google que será usado para gerar as respostas
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.3) 
 
 
-# --- ALTERAÇÃO: Lógica de carregamento de múltiplos documentos ---
-
-# --- DEFINA SEUS DOCUMENTOS AQUI ---
-# Adicione os nomes dos seus arquivos PDF nesta lista.
-# Certifique-se de que eles estão na mesma pasta que o script.
 lista_de_documentos_pdf = [
     "Documentação Syna.pdf",
+    "Python do ZERO à Programação Orientada a Objetos (Fernando Belomé Feltrin).pdf"
 ]
 # -------------------------------------
 
@@ -72,9 +67,6 @@ for caminho_do_pdf in lista_de_documentos_pdf:
         print(f"Pulando o arquivo '{caminho_do_pdf}'...")
 
 print(f"\nCarregamento concluído. Total de páginas de todos os documentos: {len(documentos_totais)}")
-
-# --- Fim da Alteração ---
-
 
 # Dividir os documentos em chunks e criar o Vector DB
 vector_db = None

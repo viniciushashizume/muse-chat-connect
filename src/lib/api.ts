@@ -1,12 +1,13 @@
-// API Configuration and Integration Point
-// This file centralizes API calls for easier maintenance
+// src/lib/api.ts
+
+import { Challenge } from "@/types/challenge"; // Importe o tipo Challenge
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const CHALLENGE_API_BASE_URL = import.meta.env.VITE_CHALLENGE_API_URL || "http://localhost:8001";
 
 // Endpoints específicos
 export const CHAT_ENDPOINT = `${API_BASE_URL}/api/chat`;
-export const GENERATE_CHALLENGES_ENDPOINT = `${API_BASE_URL}/api/generate-challenges`;
-export const VALIDATE_CHALLENGE_ENDPOINT = `${API_BASE_URL}/api/validate-challenge`;
+export const CHALLENGE_ENDPOINT = `${CHALLENGE_API_BASE_URL}/api/challenge`;
 
 export interface ChatApiRequest {
   message: string;
@@ -16,17 +17,26 @@ export interface ChatApiResponse {
   response: string;
 }
 
+// +++ Define a estrutura da resposta da API de desafios +++
+export interface ChallengeApiResponse {
+  challenge: Challenge | { // Pode ser um desafio válido ou um objeto de erro
+      id: string;
+      title: string;
+      description: string;
+      type: "error";
+      difficulty: "none";
+  };
+}
+
 /**
  * Send a message to the RAG API and get a response
- * 
+ *
  * @param message - User's message to send to the API
  * @returns Promise with the assistant's response
- * 
- * TODO: Uncomment and configure when your Python API is ready
  */
 export async function sendChatMessage(message: string): Promise<string> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/chat`, {
+    const response = await fetch(CHAT_ENDPOINT, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -35,7 +45,7 @@ export async function sendChatMessage(message: string): Promise<string> {
     });
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.status} ${response.statusText}`);
+      throw new Error(`Chat API error: ${response.status} ${response.statusText}`);
     }
 
     const data: ChatApiResponse = await response.json();
@@ -47,10 +57,45 @@ export async function sendChatMessage(message: string): Promise<string> {
 }
 
 /**
- * Mock function for testing without API
- * Remove this when the real API is ready
+ * Sends a topic to the Challenge Agent API and gets a challenge object.
+ *
+ * @param topic - The topic for challenge generation (e.g., "software", "robotica")
+ * @returns Promise with the challenge object (or an error object)
  */
-export async function mockChatResponse(message: string): Promise<string> {
-  await new Promise((resolve) => setTimeout(resolve, 1500));
-  return `Você disse: "${message}"\n\nEsta é uma resposta simulada. Quando conectar à API Python, vou processar sua mensagem usando RAG e retornar respostas reais baseadas em conhecimento.\n\n**Exemplo de código:**\n\`\`\`python\ndef process_rag_query(query: str) -> str:\n    # Your RAG logic here\n    return response\n\`\`\``;
+ // +++ Ajusta o tipo de retorno para ChallengeApiResponse +++
+export async function generateChallenges(topic: string): Promise<ChallengeApiResponse> {
+  try {
+    const response = await fetch(CHALLENGE_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ message: topic } as ChatApiRequest),
+    });
+
+    if (!response.ok) {
+      // Tenta pegar detalhes do erro se a API retornar JSON
+      let errorDetail = `Challenge API error: ${response.status} ${response.statusText}`;
+      try {
+          const errorJson = await response.json();
+          errorDetail = errorJson.detail || errorDetail;
+      } catch (e) { /* Ignora se não for JSON */ }
+      throw new Error(errorDetail);
+    }
+
+    const data: ChallengeApiResponse = await response.json();
+    return data; // Retorna o objeto { challenge: ... }
+  } catch (error) {
+    console.error("Error calling challenge API:", error);
+    // Retorna um objeto de erro estruturado em caso de falha na comunicação
+     return {
+        challenge: {
+            id: "error-fetch",
+            title: "Erro de Rede",
+            description: error instanceof Error ? error.message : "Não foi possível conectar à API de desafios.",
+            type: "error",
+            difficulty: "none"
+        }
+    };
+  }
 }
