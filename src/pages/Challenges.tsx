@@ -2,8 +2,9 @@ import { useState } from "react";
 import { Challenge } from "@/types/challenge";
 import { ChallengeCard } from "@/components/challenges/ChallengeCard";
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Code2, Bot } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // Mock data - será substituído pela API RAG
 const mockChallenges: Challenge[] = [
@@ -35,6 +36,7 @@ const mockChallenges: Challenge[] = [
 export default function Challenges() {
   const [challenges, setChallenges] = useState<Challenge[]>(mockChallenges);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedArea, setSelectedArea] = useState<"software" | "robotica">("software");
   const { toast } = useToast();
 
   // Função que será integrada com a API RAG para gerar novos desafios
@@ -45,6 +47,7 @@ export default function Challenges() {
     // const response = await fetch(API_URL + '/generate-challenges', {
     //   method: 'POST',
     //   headers: { 'Content-Type': 'application/json' },
+    //   body: JSON.stringify({ area: selectedArea }),
     // });
     // const newChallenges = await response.json();
     // setChallenges(newChallenges);
@@ -53,7 +56,7 @@ export default function Challenges() {
     setTimeout(() => {
       toast({
         title: "Novos desafios gerados!",
-        description: "A API RAG ainda não está conectada.",
+        description: `Desafios de ${selectedArea} serão gerados pela API RAG.`,
       });
       setIsLoading(false);
     }, 1000);
@@ -91,19 +94,34 @@ export default function Challenges() {
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-background to-muted/20">
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
-        <div className="container flex h-16 items-center justify-between px-4">
-          <div>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-              Desafios de Aprendizado
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Gerados automaticamente por IA
-            </p>
+        <div className="container px-4 py-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+                Desafios de Aprendizado
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Gerados automaticamente por IA
+              </p>
+            </div>
+            <Button onClick={generateNewChallenges} disabled={isLoading}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+              Gerar Novos Desafios
+            </Button>
           </div>
-          <Button onClick={generateNewChallenges} disabled={isLoading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-            Gerar Novos Desafios
-          </Button>
+
+          <Tabs value={selectedArea} onValueChange={(value) => setSelectedArea(value as "software" | "robotica")} className="w-full">
+            <TabsList className="grid w-full max-w-md grid-cols-2">
+              <TabsTrigger value="software" className="flex items-center gap-2">
+                <Code2 className="h-4 w-4" />
+                Software
+              </TabsTrigger>
+              <TabsTrigger value="robotica" className="flex items-center gap-2">
+                <Bot className="h-4 w-4" />
+                Robótica
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
       </header>
 
