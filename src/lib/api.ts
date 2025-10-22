@@ -3,6 +3,11 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
+// Endpoints específicos
+export const CHAT_ENDPOINT = `${API_BASE_URL}/api/chat`;
+export const GENERATE_CHALLENGES_ENDPOINT = `${API_BASE_URL}/api/generate-challenges`;
+export const VALIDATE_CHALLENGE_ENDPOINT = `${API_BASE_URL}/api/validate-challenge`;
+
 export interface ChatApiRequest {
   message: string;
 }
