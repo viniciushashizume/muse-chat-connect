@@ -1,4 +1,5 @@
-export type ChallengeType = "multiple-choice" | "code";
+// --- ALTERAÇÃO: Adicionado "essay" ---
+export type ChallengeType = "multiple-choice" | "code" | "essay";
 
 export interface MultipleChoiceOption {
   id: string;
@@ -10,7 +11,7 @@ export interface Challenge {
   title: string;
   description: string;
   type: ChallengeType;
-  difficulty: "easy" | "medium" | "hard";
+  difficulty: "easy" | "medium" | "hard" | "none"; // Adicionado "none" para erros
   
   // Para múltipla escolha
   options?: MultipleChoiceOption[];
@@ -19,6 +20,8 @@ export interface Challenge {
   // Para código
   codeTemplate?: string;
   expectedOutput?: string;
+
+  // Para 'essay', nenhum campo extra é necessário
   
   // Resposta do usuário
   userAnswer?: string;

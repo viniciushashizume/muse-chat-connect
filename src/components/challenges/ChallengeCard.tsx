@@ -15,11 +15,13 @@ interface ChallengeCardProps {
 
 export function ChallengeCard({ challenge, onSubmit }: ChallengeCardProps) {
   const [selectedOption, setSelectedOption] = useState<string>("");
-  const [codeAnswer, setCodeAnswer] = useState(challenge.codeTemplate || "");
+  // --- ALTERAÇÃO: Renomeado 'codeAnswer' para 'textAnswer' ---
+  const [textAnswer, setTextAnswer] = useState(challenge.codeTemplate || "");
   const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = () => {
-    const answer = challenge.type === "multiple-choice" ? selectedOption : codeAnswer;
+    // --- ALTERAÇÃO: Usa 'textAnswer' para 'code' e 'essay' ---
+    const answer = (challenge.type === "multiple-choice") ? selectedOption : textAnswer;
     onSubmit(challenge.id, answer);
     setSubmitted(true);
   };
@@ -32,6 +34,25 @@ export function ChallengeCard({ challenge, onSubmit }: ChallengeCardProps) {
       default: return "bg-gray-500";
     }
   };
+
+  // Lógica para lidar com cartões de erro da API
+  if (challenge.type === "error") {
+    return (
+      <Card className="w-full border-red-500/50">
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <CardTitle className="text-red-700">{challenge.title}</CardTitle>
+              <CardDescription>{challenge.description}</CardDescription>
+            </div>
+            <Badge variant="destructive">
+              Erro
+            </Badge>
+          </div>
+        </CardHeader>
+      </Card>
+    );
+  }
 
   return (
     <Card className="w-full">
@@ -72,8 +93,9 @@ export function ChallengeCard({ challenge, onSubmit }: ChallengeCardProps) {
             <Label htmlFor={`code-${challenge.id}`}>Seu código:</Label>
             <Textarea
               id={`code-${challenge.id}`}
-              value={codeAnswer}
-              onChange={(e) => setCodeAnswer(e.target.value)}
+              // --- ALTERAÇÃO: Usa 'textAnswer' ---
+              value={textAnswer}
+              onChange={(e) => setTextAnswer(e.target.value)}
               className="font-mono min-h-[200px]"
               placeholder="Digite seu código aqui..."
               disabled={submitted}
@@ -86,6 +108,22 @@ export function ChallengeCard({ challenge, onSubmit }: ChallengeCardProps) {
           </div>
         )}
 
+        {/* --- ALTERAÇÃO: Adicionado bloco para 'essay' --- */}
+        {challenge.type === "essay" && (
+          <div className="space-y-2">
+            <Label htmlFor={`essay-${challenge.id}`}>Sua resposta:</Label>
+            <Textarea
+              id={`essay-${challenge.id}`}
+              value={textAnswer} // Reutiliza o state 'textAnswer'
+              onChange={(e) => setTextAnswer(e.target.value)}
+              className="min-h-[150px]"
+              placeholder="Digite sua resposta dissertativa aqui..."
+              disabled={submitted}
+            />
+          </div>
+        )}
+
+
         {submitted && challenge.isCorrect !== undefined && (
           <div className={`p-4 rounded-lg ${challenge.isCorrect ? "bg-green-500/10 text-green-700" : "bg-red-500/10 text-red-700"}`}>
             {challenge.isCorrect ? (
@@ -96,7 +134,8 @@ export function ChallengeCard({ challenge, onSubmit }: ChallengeCardProps) {
             ) : (
               <div className="flex items-center gap-2">
                 <XCircle className="h-5 w-5" />
-                <span>Incorreto. Tente novamente!</span>
+                {/* --- ALTERAÇÃO: Feedback genérico para 'essay' --- */}
+                <span>{challenge.type === 'essay' ? 'Resposta submetida.' : 'Incorreto. Tente novamente!'}</span>
               </div>
             )}
           </div>
@@ -107,13 +146,14 @@ export function ChallengeCard({ challenge, onSubmit }: ChallengeCardProps) {
         <Button 
           onClick={handleSubmit} 
           disabled={
+            // --- ALTERAÇÃO: Lógica de 'disabled' atualizada para 'essay' ---
             submitted ||
             (challenge.type === "multiple-choice" && !selectedOption) ||
-            (challenge.type === "code" && !codeAnswer.trim())
+            ((challenge.type === "code" || challenge.type === "essay") && !textAnswer.trim())
           }
           className="w-full"
         >
-          Submeter Resposta
+          {submitted ? 'Enviado' : 'Submeter Resposta'}
         </Button>
       </CardFooter>
     </Card>

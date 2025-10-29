@@ -2,12 +2,12 @@
 
 import os
 import requests
-import json # Importe json
+import json
 from io import BytesIO
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Any # Importe Any
+from typing import Any, List # Importe List
 
 # Importações do LangChain
 from langchain_community.vectorstores import FAISS
@@ -38,7 +38,7 @@ except Exception as e:
     print(f"Erro ao carregar o modelo de embedding: {e}")
     exit()
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.5)
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.8) # Temperatura um pouco mais alta
 
 # --- Lógica de carregamento de múltiplos documentos ---
 lista_de_documentos_pdf = [
@@ -69,8 +69,15 @@ if documentos_totais:
     chunks = text_splitter.split_documents(documentos_totais)
     print(f"Criando Vector DB com {len(chunks)} chunks de {len(lista_de_documentos_pdf)} documento(s)...")
     vector_db = FAISS.from_documents(chunks, embeddings)
-    retriever = vector_db.as_retriever(search_kwargs={"k": 5})
-    print("Vector DB criado com sucesso!")
+    
+    # --- ALTERAÇÃO: Mudar para MMR (Maximal Marginal Relevance) para diversidade ---
+    # fetch_k=30: Busca os 30 chunks mais relevantes
+    # k=10:      Seleciona os 10 melhores que também são mais diferentes entre si
+    retriever = vector_db.as_retriever(
+        search_type="mmr",
+        search_kwargs={"k": 10, "fetch_k": 30}
+    )
+    print("Vector DB (MMR) criado com sucesso!")
 else:
     print("Nenhum documento foi carregado. A API não pode iniciar o RAG.")
     retriever = None
@@ -80,7 +87,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8080"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -89,60 +96,77 @@ app.add_middleware(
 class ChatRequest(BaseModel):
     message: str
 
+# --- ALTERAÇÃO: O modelo de resposta agora espera uma LISTA de desafios ---
 class ChallengeResponse(BaseModel):
-    challenge: Any
+    challenges: List[Any] # Alterado de 'challenge: Any' para 'challenges: List[Any]'
 
-# --- ALTERAÇÃO: Prompt Template com chaves escapadas no JSON ---
+# --- ALTERAÇÃO: Prompt totalmente reescrito para gerar MÚLTIPLOS desafios e FORÇAR variedade ---
 prompt_template_desafio = ChatPromptTemplate.from_template("""
-    Você é um "Mestre de Desafios" e sua especialidade é criar desafios e perguntas complexas com base em documentações técnicas, formatando a saída como JSON.
-    Sua missão é forçar o usuário a pensar criticamente sobre o conteúdo da documentação fornecida e retornar o desafio em um formato JSON específico.
+    Você é um "Mestre de Desafios" e sua especialidade é criar desafios complexos e VARIADOS com base em documentações técnicas, formatando a saída como um array JSON.
 
-    Baseado no CONTEXTO abaixo (extraído da documentação), crie UM DESAFIO ou PERGUNTA sobre o TÓPICO fornecido pelo usuário.
+    Baseado no CONTEXTO abaixo, crie 3 DESAFIOS VARIADOS sobre o TÓPICO fornecido.
 
-    REGRAS:
-    1.  **Base no Contexto:** O desafio DEVE ser 100% baseado nas informações do contexto.
-    2.  **Foco no Tópico:** O desafio deve ser relevante ao TÓPICO que o usuário pediu (representado pela "PERGUNTA DO USUÁRIO").
-    3.  **Formato do Desafio:** Seja criativo (múltipla escolha, cenário, pergunta direta, mini-tarefa).
-    4.  **Não dê a Resposta:** Exceto se for múltipla escolha (inclua as opções).
-    5.  **Se o Tópico Não Estiver no Contexto:** Retorne um JSON com uma mensagem de erro no campo 'description'. Ex: {{"id": "error", "title": "Erro", "description": "Não foi possível criar um desafio sobre '{question}' com a documentação atual.", "type": "error", "difficulty": "none"}}
-    6.  **FORMATO JSON OBRIGATÓRIO:** Sua resposta DEVE ser um único objeto JSON válido, seguindo EXATAMENTE a estrutura abaixo. NÃO inclua ```json ``` no início ou fim.
-
-        **Estrutura JSON Esperada:**
-        {{{{
-          "id": "string",
-          "title": "string",
-          "description": "string",
-          "type": "string",
-          "difficulty": "string",
-          "options": [
-            {{"id": "string", "text": "string"}},
-            {{"id": "string", "text": "string"}}
-          ],
-          "correctOptionId": "string",
-          "codeTemplate": "string",
-          "expectedOutput": "string"
-        }}}}
+    TÓPICO PARA OS DESAFIOS (PERGUNTA DO USUÁRIO):
+    {question}
 
     DOCUMENTAÇÃO (CONTEXTO):
     {context}
 
-    TÓPICO PARA O DESAFIO (PERGUNTA DO USUÁRIO):
-    {question}
+    === REGRAS OBRIGATÓRIAS ===
+    1.  **Base no Contexto:** Os desafios DEVEM ser 100% baseados no contexto.
+    2.  **Formato JSON OBRIGATÓRIO:** Sua resposta DEVE ser um único ARRAY JSON válido, contendo 3 objetos de desafio. NÃO inclua ```json ```.
+    3.  **SEMPRE CRIE 3 DESAFIOS.**
+    4.  **VARIAÇÃO DE TIPO:** Tente variar os tipos ("multiple-choice", "code", "essay").
+    5.  **NÃO REPITA PERGUNTAS:** Garanta que os 3 desafios sejam diferentes entre si.
+    6.  **SEJA ESPECÍFICO:** Evite perguntas genéricas (ex: "O que é software?"). Faça perguntas sobre detalhes, código ou cenários dos projetos.
 
-    DESAFIO GERADO (APENAS O OBJETO JSON):
+    === REGRAS DE TÓPICO ===
+    * **Se o TópICO for "software":**
+        * Gere pelo menos UMA pergunta (type: "code") sobre Python (ex: sintaxe, classes, funções) com base no PDF de Python.
+        * Gere pelo menos UMA pergunta (type: "multiple-choice" ou "essay") sobre conceitos de Python ou software da documentação.
+    * **Se o TÓPICO for "robotica":**
+        * Gere pelo menos UMA pergunta sobre a documentação específica da Syna (ex: projetos, componentes do robô, arquitetura).
+        * Gere pelo menos UMA pergunta sobre conceitos gerais de robótica ou software embarcado do contexto.
+
+    === ESTRUTURA JSON ESPERADA (ARRAY DE 3 OBJETOS) ===
+    [
+      {{
+        "id": "string",
+        "title": "string",
+        "description": "string",
+        "type": "string (multiple-choice, code, ou essay)",
+        "difficulty": "string (easy, medium, ou hard)",
+        "options": [],
+        "correctOptionId": "",
+        "codeTemplate": "",
+        "expectedOutput": ""
+      }},
+      {{ ... segundo desafio ... }},
+      {{ ... terceiro desafio ... }}
+    ]
+    
+    Se não for possível gerar desafios com o contexto, retorne um array com um objeto de erro:
+    [
+      {{"id": "error", "title": "Erro de Contexto", "description": "Não foi possível criar desafios sobre '{question}' com a documentação atual.", "type": "error", "difficulty": "none"}}
+    ]
+
+    ARRAY JSON DE 3 DESAFIOS GERADOS:
 """)
 # --- Fim da Alteração do Prompt ---
 
 
+# --- ALTERAÇÃO: Endpoint atualizado para 'response_model=ChallengeResponse' e lógica de array ---
 @app.post("/api/challenge", response_model=ChallengeResponse)
 async def generate_challenge(request: ChatRequest) -> ChallengeResponse:
+    error_challenge = {
+        "id": "error-default", "title": "Erro Interno",
+        "description": "Ocorreu um erro ao processar a solicitação.",
+        "type": "error", "difficulty": "none"
+    }
+
     if not retriever:
-        error_challenge = {
-            "id": "error-no-rag", "title": "Erro de Configuração",
-            "description": "O sistema de busca (RAG) não foi inicializado corretamente.",
-            "type": "error", "difficulty": "none"
-        }
-        return ChallengeResponse(challenge=error_challenge)
+        error_challenge["description"] = "O sistema de busca (RAG) não foi inicializado."
+        return ChallengeResponse(challenges=[error_challenge]) # Retorna array com erro
 
     rag_chain = (
         {"context": retriever, "question": RunnablePassthrough()}
@@ -154,38 +178,45 @@ async def generate_challenge(request: ChatRequest) -> ChallengeResponse:
     try:
         bot_response_string = rag_chain.invoke(request.message)
         try:
-            clean_response_string = bot_response_string.strip().removeprefix("```json").removesuffix("```").strip()
-            challenge_data = json.loads(clean_response_string)
-            if not isinstance(challenge_data, dict) or "id" not in challenge_data or "title" not in challenge_data:
-                 raise ValueError("JSON retornado pelo LLM não tem a estrutura esperada.")
-            return ChallengeResponse(challenge=challenge_data)
-        except json.JSONDecodeError:
-            print(f"Erro: LLM não retornou JSON válido. Resposta recebida:\n{bot_response_string}")
-            error_challenge = {
-                "id": "error-json-format", "title": "Erro de Formato",
-                "description": "O assistente não conseguiu formatar o desafio corretamente. Tente gerar novamente.",
-                 "type": "error", "difficulty": "none"
-            }
-            return ChallengeResponse(challenge=error_challenge)
+            # Limpeza
+            clean_response_string = bot_response_string.strip().lstrip("```json").rstrip("```").strip()
+            
+            # --- ALTERAÇÃO: Espera um array (começa com '[') ---
+            json_start = clean_response_string.find('[')
+            json_end = clean_response_string.rfind(']')
+            
+            if json_start == -1 or json_end == -1 or json_end < json_start:
+                 raise json.JSONDecodeError("Nenhum array JSON válido encontrado.", clean_response_string, 0)
+                 
+            json_string = clean_response_string[json_start:json_end+1]
+            
+            challenge_data = json.loads(json_string)
+            
+            # --- ALTERAÇÃO: Verifica se é uma lista ---
+            if not isinstance(challenge_data, list):
+                 raise ValueError("JSON retornado pelo LLM não é um array (lista).")
+
+            # Se a lista estiver vazia ou contiver dados inválidos (opcional)
+            if not challenge_data:
+                raise ValueError("LLM retornou um array vazio.")
+
+            return ChallengeResponse(challenges=challenge_data) # Retorna o array de desafios
+        
+        except json.JSONDecodeError as e:
+            print(f"Erro: LLM não retornou ARRAY JSON válido. Erro: {e}. Resposta:\n{bot_response_string}")
+            error_challenge["description"] = "O assistente não conseguiu formatar os desafios (JSON). Tente gerar novamente."
+            return ChallengeResponse(challenges=[error_challenge])
         except ValueError as ve:
-             print(f"Erro: {ve}. Resposta recebida:\n{bot_response_string}")
-             error_challenge = {
-                "id": "error-json-structure", "title": "Erro de Estrutura",
-                "description": "O JSON retornado pelo assistente não possui a estrutura esperada. Tente gerar novamente.",
-                 "type": "error", "difficulty": "none"
-            }
-             return ChallengeResponse(challenge=error_challenge)
+             print(f"Erro: {ve}. Resposta:\n{bot_response_string}")
+             error_challenge["description"] = "O assistente não retornou a estrutura de array esperada. Tente gerar novamente."
+             return ChallengeResponse(challenges=[error_challenge])
 
     except Exception as e:
         print(f"Erro inesperado na chain RAG: {e}")
-        error_challenge = {
-            "id": "error-rag-chain", "title": "Erro Interno",
-            "description": "Ocorreu um erro ao processar a solicitação do desafio.",
-             "type": "error", "difficulty": "none"
-        }
-        return ChallengeResponse(challenge=error_challenge)
+        error_challenge["description"] = f"Erro interno no servidor: {e}"
+        return ChallengeResponse(challenges=[error_challenge])
 
 if __name__ == "__main__":
     import uvicorn
-    print("Iniciando a API de DESAFIOS em http://localhost:8001")
+    print("Iniciando a API de DESAFIOS (v2 - Múltiplos Desafios) em http://localhost:8001")
     uvicorn.run(app, host="0.0.0.0", port=8001)

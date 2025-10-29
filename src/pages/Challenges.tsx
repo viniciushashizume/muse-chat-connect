@@ -1,53 +1,55 @@
 // src/pages/Challenges.tsx
 import { useState } from "react";
-import { Challenge } from "@/types/challenge"; // Mantenha a definição do tipo
+import { Challenge } from "@/types/challenge";
 import { ChallengeCard } from "@/components/challenges/ChallengeCard";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Code2, Bot } from "lucide-react";
-import { useToast } from "@/hooks/use-toast"; // useToast de hooks
+import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { generateChallenges } from "@/lib/api"; // Importe a função ajustada
-import { Skeleton } from "@/components/ui/skeleton"; // Importe Skeleton para loading state
+import { generateChallenges } from "@/lib/api";
+import { Skeleton } from "@/components/ui/skeleton";
 
 
 export default function Challenges() {
-  const [challenges, setChallenges] = useState<Challenge[]>([]); // Começa vazio
+  const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedArea, setSelectedArea] = useState<"software" | "robotica">("software");
   const { toast } = useToast();
 
   const generateNewChallenges = async () => {
     setIsLoading(true);
-    setChallenges([]); // Limpa desafios anteriores ao gerar novos
+    setChallenges([]); // Limpa desafios anteriores
 
     try {
-      // generateChallenges agora retorna a estrutura { challenge: Challenge } ou { challenge: ErrorChallenge }
+      // --- ALTERAÇÃO: A API agora retorna { challenges: [...] } ---
       const response = await generateChallenges(selectedArea);
-      const challengeResponse = response.challenge; // Pega o objeto dentro da resposta
+      const challengeList = response.challenges; // Pega o ARRAY
 
-      // Verifica se a resposta NÃO é um erro antes de tentar usá-la como desafio
-      if (challengeResponse && typeof challengeResponse === 'object' && challengeResponse.type !== 'error') {
-          // Como a API agora retorna um único objeto challenge, colocamos ele em um array
-          setChallenges([challengeResponse as Challenge]); // Faz um type assertion aqui
+      // Verifica se a resposta é um array e não está vazio
+      if (challengeList && Array.isArray(challengeList) && challengeList.length > 0) {
+        
+        // Verifica se o PRIMEIRO item é um erro (como definido no prompt)
+        if (challengeList[0].type === 'error') {
            toast({
-              title: "Novo desafio gerado!",
-              description: `Desafio de ${selectedArea} carregado da API.`,
-            });
-      } else if (challengeResponse && challengeResponse.type === 'error') {
-          // Se a API retornou um JSON de erro estruturado
-           toast({
-              title: challengeResponse.title || "Erro ao gerar desafio",
-              description: challengeResponse.description || "Não foi possível gerar o desafio.",
+              title: challengeList[0].title || "Erro ao gerar desafio",
+              description: challengeList[0].description || "Não foi possível gerar o desafio.",
               variant: "destructive",
             });
            setChallenges([]); // Garante que não haja desafios
-      }
-       else {
-         // Caso inesperado (não deveria acontecer se o backend estiver correto)
-         console.error("Resposta inesperada da API:", challengeResponse);
+        } else {
+          // --- ALTERAÇÃO: Define o array inteiro de desafios ---
+          setChallenges(challengeList as Challenge[]);
+          toast({
+            title: `${challengeList.length} novos desafios gerados!`,
+            description: `Desafios de ${selectedArea} carregados da API.`,
+          });
+        }
+      } else {
+         // Caso a API retorne um array vazio ou formato inesperado
+         console.error("Resposta inesperada da API (esperava um array):", response);
          toast({
             title: "Erro inesperado",
-            description: "A API retornou um formato desconhecido.",
+            description: "A API retornou um formato desconhecido ou vazio.",
             variant: "destructive",
           });
          setChallenges([]);
@@ -60,7 +62,7 @@ export default function Challenges() {
         description: "Não foi possível conectar à API ou ocorreu um erro no servidor.",
         variant: "destructive",
       });
-      setChallenges([]); // Garante que não haja desafios antigos em caso de erro
+      setChallenges([]);
     } finally {
       setIsLoading(false);
     }
@@ -68,24 +70,25 @@ export default function Challenges() {
 
   const handleSubmitAnswer = (challengeId: string, answer: string) => {
       // TODO: Integrar com API RAG para validar resposta
-      // Por enquanto, apenas marca como completo e exibe mensagem
-      console.log("Submit:", challengeId, answer); // Apenas para debug
+      console.log("Submit:", challengeId, answer);
        setChallenges((prev) =>
           prev.map((c) => {
             if (c.id === challengeId) {
-              // Simula uma validação simples para UI - REMOVER QUANDO TIVER API DE VALIDAÇÃO
               const isCorrect = c.type === "multiple-choice"
                 ? answer === c.correctOptionId
-                : answer.includes("return"); // Validação muito básica para código
+                : c.type === "code" ? answer.includes("return") : true; // Validação básica
 
-              return { ...c, userAnswer: answer, isCorrect, completed: true };
+              // Para 'essay', apenas marca como completo
+              const feedbackCorrect = (c.type === 'essay' && c.completed) ? false : isCorrect;
+
+              return { ...c, userAnswer: answer, isCorrect: feedbackCorrect, completed: true };
             }
             return c;
           })
         );
       toast({
         title: "Resposta submetida!",
-        description: "Validação com API RAG será implementada em breve.",
+        description: c.type === 'essay' ? "Resposta registrada." : "Validação com API RAG será implementada.",
       });
     };
 
@@ -128,12 +131,14 @@ export default function Challenges() {
         <div className="container py-8 px-4">
           {isLoading ? (
               <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
-                {/* Mostra um ou dois skeletons dependendo do layout */}
+                {/* --- ALTERAÇÃO: Mostra 3 Skeletons --- */}
                 <Skeleton className="h-72 w-full rounded-lg" />
-                <Skeleton className="h-72 w-full rounded-lg hidden lg:block" />
+                <Skeleton className="h-72 w-full rounded-lg" />
+                <Skeleton className="h-72 w-full rounded-lg" />
               </div>
            ) : challenges.length > 0 ? (
-              <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
+              // --- ALTERAÇÃO: Layout da grade ajustado para 3 colunas em telas grandes ---
+              <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-3">
                 {challenges.map((challenge) => (
                   <ChallengeCard
                     key={challenge.id}
