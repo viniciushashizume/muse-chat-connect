@@ -1,3 +1,4 @@
+// src/components/challenges/ChallengeCard.tsx
 import { useState } from "react";
 import { Challenge } from "@/types/challenge";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,16 +15,19 @@ interface ChallengeCardProps {
 }
 
 export function ChallengeCard({ challenge, onSubmit }: ChallengeCardProps) {
+  // --- 1. ESTADO INTERNO 'submitted' REMOVIDO ---
+
+  // Estados para controlar os inputs (isso está correto)
   const [selectedOption, setSelectedOption] = useState<string>("");
-  // --- ALTERAÇÃO: Renomeado 'codeAnswer' para 'textAnswer' ---
   const [textAnswer, setTextAnswer] = useState(challenge.codeTemplate || "");
-  const [submitted, setSubmitted] = useState(false);
+  
+  // Variável para verificar se uma tentativa foi feita (baseado na prop)
+  const hasAttempted = challenge.userAnswer !== undefined;
 
   const handleSubmit = () => {
-    // --- ALTERAÇÃO: Usa 'textAnswer' para 'code' e 'essay' ---
     const answer = (challenge.type === "multiple-choice") ? selectedOption : textAnswer;
     onSubmit(challenge.id, answer);
-    setSubmitted(true);
+    // --- 2. 'setSubmitted(true)' REMOVIDO DAQUI ---
   };
 
   const getDifficultyColor = () => {
@@ -35,8 +39,8 @@ export function ChallengeCard({ challenge, onSubmit }: ChallengeCardProps) {
     }
   };
 
-  // Lógica para lidar com cartões de erro da API
   if (challenge.type === "error") {
+    // (Lógica de erro permanece igual)
     return (
       <Card className="w-full border-red-500/50">
         <CardHeader>
@@ -73,14 +77,17 @@ export function ChallengeCard({ challenge, onSubmit }: ChallengeCardProps) {
           <RadioGroup value={selectedOption} onValueChange={setSelectedOption}>
             {challenge.options.map((option) => (
               <div key={option.id} className="flex items-center space-x-2">
-                <RadioGroupItem value={option.id} id={option.id} disabled={submitted} />
+                {/* --- 3. 'disabled' agora usa 'challenge.completed' --- */}
+                {/* challenge.completed só será true se a resposta for correta */}
+                <RadioGroupItem value={option.id} id={option.id} disabled={challenge.completed} />
                 <Label htmlFor={option.id} className="cursor-pointer">
                   {option.text}
                 </Label>
-                {submitted && option.id === challenge.correctOptionId && (
+                {/* --- 4. Feedback visual usa 'hasAttempted' --- */}
+                {hasAttempted && option.id === challenge.correctOptionId && (
                   <CheckCircle2 className="h-4 w-4 text-green-500" />
                 )}
-                {submitted && option.id === selectedOption && option.id !== challenge.correctOptionId && (
+                {hasAttempted && option.id === selectedOption && option.id !== challenge.correctOptionId && (
                   <XCircle className="h-4 w-4 text-red-500" />
                 )}
               </div>
@@ -93,12 +100,12 @@ export function ChallengeCard({ challenge, onSubmit }: ChallengeCardProps) {
             <Label htmlFor={`code-${challenge.id}`}>Seu código:</Label>
             <Textarea
               id={`code-${challenge.id}`}
-              // --- ALTERAÇÃO: Usa 'textAnswer' ---
               value={textAnswer}
               onChange={(e) => setTextAnswer(e.target.value)}
               className="font-mono min-h-[200px]"
               placeholder="Digite seu código aqui..."
-              disabled={submitted}
+              // --- 3. 'disabled' agora usa 'challenge.completed' ---
+              disabled={challenge.completed}
             />
             {challenge.expectedOutput && (
               <p className="text-sm text-muted-foreground">
@@ -108,23 +115,23 @@ export function ChallengeCard({ challenge, onSubmit }: ChallengeCardProps) {
           </div>
         )}
 
-        {/* --- ALTERAÇÃO: Adicionado bloco para 'essay' --- */}
         {challenge.type === "essay" && (
           <div className="space-y-2">
             <Label htmlFor={`essay-${challenge.id}`}>Sua resposta:</Label>
             <Textarea
               id={`essay-${challenge.id}`}
-              value={textAnswer} // Reutiliza o state 'textAnswer'
+              value={textAnswer} 
               onChange={(e) => setTextAnswer(e.target.value)}
               className="min-h-[150px]"
               placeholder="Digite sua resposta dissertativa aqui..."
-              disabled={submitted}
+              // --- 3. 'disabled' agora usa 'challenge.completed' ---
+              disabled={challenge.completed}
             />
           </div>
         )}
 
-
-        {submitted && challenge.isCorrect !== undefined && (
+        {/* --- 4. Bloco de feedback principal usa 'hasAttempted' --- */}
+        {hasAttempted && challenge.isCorrect !== undefined && (
           <div className={`p-4 rounded-lg ${challenge.isCorrect ? "bg-green-500/10 text-green-700" : "bg-red-500/10 text-red-700"}`}>
             {challenge.isCorrect ? (
               <div className="flex items-center gap-2">
@@ -134,7 +141,6 @@ export function ChallengeCard({ challenge, onSubmit }: ChallengeCardProps) {
             ) : (
               <div className="flex items-center gap-2">
                 <XCircle className="h-5 w-5" />
-                {/* --- ALTERAÇÃO: Feedback genérico para 'essay' --- */}
                 <span>{challenge.type === 'essay' ? 'Resposta submetida.' : 'Incorreto. Tente novamente!'}</span>
               </div>
             )}
@@ -146,14 +152,15 @@ export function ChallengeCard({ challenge, onSubmit }: ChallengeCardProps) {
         <Button 
           onClick={handleSubmit} 
           disabled={
-            // --- ALTERAÇÃO: Lógica de 'disabled' atualizada para 'essay' ---
-            submitted ||
+            // --- 5. Lógica de 'disabled' do botão usa 'challenge.completed' ---
+            challenge.completed ||
             (challenge.type === "multiple-choice" && !selectedOption) ||
             ((challenge.type === "code" || challenge.type === "essay") && !textAnswer.trim())
           }
           className="w-full"
         >
-          {submitted ? 'Enviado' : 'Submeter Resposta'}
+          {/* --- 6. Texto do botão usa 'challenge.completed' --- */}
+          {challenge.completed ? 'Enviado' : 'Submeter Resposta'}
         </Button>
       </CardFooter>
     </Card>
