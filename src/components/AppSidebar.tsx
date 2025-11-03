@@ -1,4 +1,5 @@
-import { MessageSquare, Trophy } from "lucide-react";
+import { MessageSquare, Trophy, Info, Moon, Sun } from "lucide-react";
+import { useTheme } from "next-themes";
 import { NavLink } from "react-router-dom";
 import {
   Sidebar,
@@ -15,12 +16,14 @@ import {
 
 const items = [
   { title: "Assistente RAG", url: "/", icon: MessageSquare },
-  { title: "Desafios", url: "/challenges", icon: Trophy },
+  { title: "Desafios", url: "/area-selection", icon: Trophy },
+  { title: "Sobre", url: "/about", icon: Info },
 ];
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
+  const { theme, setTheme } = useTheme();
 
   return (
     <Sidebar collapsible="icon">
@@ -47,6 +50,27 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup className="mt-auto">
+          <SidebarGroupLabel>Configurações</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                  tooltip="Alternar tema"
+                >
+                  {theme === "dark" ? (
+                    <Sun className="h-4 w-4" />
+                  ) : (
+                    <Moon className="h-4 w-4" />
+                  )}
+                  {!collapsed && <span>Tema {theme === "dark" ? "Claro" : "Escuro"}</span>}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

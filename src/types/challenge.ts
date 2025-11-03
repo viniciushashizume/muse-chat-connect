@@ -1,5 +1,5 @@
 // --- ALTERAÇÃO: Adicionado "essay" ---
-export type ChallengeType = "multiple-choice" | "code" | "essay";
+export type ChallengeType = "multiple-choice" | "code" | "essay" | "error";
 
 export interface MultipleChoiceOption {
   id: string;

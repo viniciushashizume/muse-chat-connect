@@ -19,13 +19,7 @@ export interface ChatApiResponse {
 
 // +++ Define a estrutura da resposta da API de desafios +++
 export interface ChallengeApiResponse {
-  challenge: Challenge | { // Pode ser um desafio válido ou um objeto de erro
-      id: string;
-      title: string;
-      description: string;
-      type: "error";
-      difficulty: "none";
-  };
+  challenges: Challenge[];
 }
 
 /**
@@ -84,18 +78,18 @@ export async function generateChallenges(topic: string): Promise<ChallengeApiRes
     }
 
     const data: ChallengeApiResponse = await response.json();
-    return data; // Retorna o objeto { challenge: ... }
+    return data; // Retorna o objeto { challenges: [...] }
   } catch (error) {
     console.error("Error calling challenge API:", error);
     // Retorna um objeto de erro estruturado em caso de falha na comunicação
-     return {
-        challenge: {
-            id: "error-fetch",
-            title: "Erro de Rede",
-            description: error instanceof Error ? error.message : "Não foi possível conectar à API de desafios.",
-            type: "error",
-            difficulty: "none"
-        }
+    return {
+      challenges: [{
+        id: "error-fetch",
+        title: "Erro de Rede",
+        description: error instanceof Error ? error.message : "Não foi possível conectar à API de desafios.",
+        type: "error",
+        difficulty: "none"
+      }]
     };
   }
 }

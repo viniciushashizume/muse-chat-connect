@@ -1,26 +1,29 @@
 // src/pages/Challenges.tsx
 import { useState, useEffect } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { Challenge } from "@/types/challenge";
 import { ChallengeCard } from "@/components/challenges/ChallengeCard";
 import { Button } from "@/components/ui/button";
-// 1. IMPORTAR ÍCONES DE NAVEGAÇÃO
-import { RefreshCw, Code2, Bot, ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
+import { RefreshCw, ArrowLeft, ArrowRight, CheckCircle2, Settings } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { generateChallenges } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Challenges() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedArea, setSelectedArea] = useState<"software" | "robotica">("software");
   const [currentChallengeIndex, setCurrentChallengeIndex] = useState(0);
   const { toast } = useToast();
+  
+  const selectedArea = searchParams.get("area") || "";
 
   useEffect(() => {
-    setChallenges([]);
-    setCurrentChallengeIndex(0);
-  }, [selectedArea]);
+    if (!selectedArea) {
+      navigate("/area-selection");
+    }
+  }, [selectedArea, navigate]);
 
   const generateNewChallenges = async () => {
     setIsLoading(true);
@@ -125,41 +128,43 @@ export default function Challenges() {
   // Variável auxiliar para saber se estamos no último desafio
   const isLastChallenge = currentChallengeIndex === challenges.length - 1;
 
+  const getAreaName = (area: string) => {
+    const areaNames: Record<string, string> = {
+      python: "Python",
+      javascript: "JavaScript",
+      cpp: "C++",
+      syna: "Syna",
+      "dog-feeder": "Alimentador de Cachorros",
+      "smart-garden": "Jardim Inteligente",
+    };
+    return areaNames[area] || area;
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-background to-muted/20">
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
         {/* ... (Header sem alteração) ... */}
-        <div className="container px-4 py-4 space-y-4">
+        <div className="container px-4 py-4">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
                 Desafios de Aprendizado
               </h1>
               <p className="text-sm text-muted-foreground">
-                Gerados automaticamente por IA com base nos documentos
+                Área: {getAreaName(selectedArea)}
               </p>
             </div>
-            <Button onClick={generateNewChallenges} disabled={isLoading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-              Gerar Novos Desafios
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => navigate("/area-selection")}>
+                <Settings className="h-4 w-4 mr-2" />
+                Mudar Área
+              </Button>
+              <Button onClick={generateNewChallenges} disabled={isLoading}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+                Gerar Novos Desafios
+              </Button>
+            </div>
           </div>
-          <Tabs
-            value={selectedArea}
-            onValueChange={(value) => setSelectedArea(value as "software" | "robotica")}
-            className="w-full"
-          >
-            <TabsList className="grid w-full max-w-md grid-cols-2">
-              <TabsTrigger value="software" className="flex items-center gap-2">
-                <Code2 className="h-4 w-4" />
-                Software
-              </TabsTrigger>
-              <TabsTrigger value="robotica" className="flex items-center gap-2">
-                <Bot className="h-4 w-4" />
-                Robótica
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
         </div>
       </header>
 
