@@ -44,6 +44,7 @@ llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.8) # Temper
 lista_de_documentos_pdf = [
     "Documentação Syna.pdf",
     "Python do ZERO à Programação Orientada a Objetos (Fernando Belomé Feltrin).pdf"
+    # Adicione aqui os PDFs de JavaScript, C++, Cachorros, etc.
 ]
 documentos_totais = []
 print("Iniciando o carregamento dos documentos locais (Agente de Desafios)...")
@@ -100,33 +101,29 @@ class ChatRequest(BaseModel):
 class ChallengeResponse(BaseModel):
     challenges: List[Any] # Alterado de 'challenge: Any' para 'challenges: List[Any]'
 
-# --- ALTERAÇÃO: Prompt totalmente reescrito para gerar MÚLTIPLOS desafios e FORÇAR variedade ---
+# --- ALTERAÇÃO: Prompt generalizado para Áreas de Aprendizado ---
 prompt_template_desafio = ChatPromptTemplate.from_template("""
     Você é um "Mestre de Desafios" e sua especialidade é criar desafios complexos e VARIADOS com base em documentações técnicas, formatando a saída como um array JSON.
 
-    Baseado no CONTEXTO abaixo, crie 3 DESAFIOS VARIADOS sobre o TÓPICO fornecido.
+    Baseado no CONTEXTO (documentação) abaixo, crie 3 DESAFIOS VARIADOS e ESPECÍFICOS sobre a ÁREA DE APRENDIZADO (TÓPICO) fornecida.
 
-    TÓPICO PARA OS DESAFIOS (PERGUNTA DO USUÁRIO):
+    ÁREA DE APRENDIZADO (TÓPICO):
     {question}
 
     DOCUMENTAÇÃO (CONTEXTO):
     {context}
 
     === REGRAS OBRIGATÓRIAS ===
-    1.  **Base no Contexto:** Os desafios DEVEM ser 100% baseados no contexto.
+    1.  **Base no Contexto:** Os desafios DEVEM ser 100% baseados no contexto fornecido.
     2.  **Formato JSON OBRIGATÓRIO:** Sua resposta DEVE ser um único ARRAY JSON válido, contendo 3 objetos de desafio. NÃO inclua ```json ```.
     3.  **SEMPRE CRIE 3 DESAFIOS.**
     4.  **VARIAÇÃO DE TIPO:** Tente variar os tipos ("multiple-choice", "code", "essay").
     5.  **NÃO REPITA PERGUNTAS:** Garanta que os 3 desafios sejam diferentes entre si.
-    6.  **SEJA ESPECÍFICO:** Evite perguntas genéricas (ex: "O que é software?"). Faça perguntas sobre detalhes, código ou cenários dos projetos.
-
-    === REGRAS DE TÓPICO ===
-    * **Se o TópICO for "software":**
-        * Gere pelo menos UMA pergunta (type: "code") sobre Python (ex: sintaxe, classes, funções) com base no PDF de Python.
-        * Gere pelo menos UMA pergunta (type: "multiple-choice" ou "essay") sobre conceitos de Python ou software da documentação.
-    * **Se o TÓPICO for "robotica":**
-        * Gere pelo menos UMA pergunta sobre a documentação específica da Syna (ex: projetos, componentes do robô, arquitetura).
-        * Gere pelo menos UMA pergunta sobre conceitos gerais de robótica ou software embarcado do contexto.
+    6.  **ESPECIFICIDADE (MUITO IMPORTANTE):**
+        * Os desafios devem ser específicos sobre o TÓPICO ({question}).
+        * Evite perguntas genéricas (ex: "O que é...?").
+        * Se o TÓPICO for uma linguagem de programação (ex: "Python", "JavaScript", "C++"), crie pelo menos um desafio de código (type: "code") baseado na sintaxe ou conceitos do contexto.
+        * Se o TÓPICO for um projeto (ex: "Syna", "Cachorros"), crie perguntas sobre seus componentes, arquitetura, funcionalidades ou dados específicos descritos no contexto.
 
     === ESTRUTURA JSON ESPERADA (ARRAY DE 3 OBJETOS) ===
     [
@@ -176,7 +173,8 @@ async def generate_challenge(request: ChatRequest) -> ChallengeResponse:
     )
 
     try:
-        bot_response_string = rag_chain.invoke(request.message)
+        # A 'request.message' agora conterá "Python", "Syna", "JavaScript", etc.
+        bot_response_string = rag_chain.invoke(request.message) 
         try:
             # Limpeza
             clean_response_string = bot_response_string.strip().lstrip("```json").rstrip("```").strip()
