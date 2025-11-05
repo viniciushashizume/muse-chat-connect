@@ -101,11 +101,11 @@ class ChatRequest(BaseModel):
 class ChallengeResponse(BaseModel):
     challenges: List[Any] # Alterado de 'challenge: Any' para 'challenges: List[Any]'
 
-# --- ALTERAÇÃO: Prompt generalizado para Áreas de Aprendizado ---
+# --- ALTERAÇÃO: Prompt focado APENAS em Múltipla Escolha ---
 prompt_template_desafio = ChatPromptTemplate.from_template("""
-    Você é um "Mestre de Desafios" e sua especialidade é criar desafios complexos e VARIADOS com base em documentações técnicas, formatando a saída como um array JSON.
+    Você é um "Mestre de Desafios" e sua especialidade é criar desafios de múltipla escolha com base em documentações técnicas, formatando a saída como um array JSON.
 
-    Baseado no CONTEXTO (documentação) abaixo, crie 3 DESAFIOS VARIADOS e ESPECÍFICOS sobre a ÁREA DE APRENDIZADO (TÓPICO) fornecida.
+    Baseado no CONTEXTO (documentação) abaixo, crie 3 DESAFIOS ESPECÍFICOS sobre a ÁREA DE APRENDIZADO (TÓPICO) fornecida.
 
     ÁREA DE APRENDIZADO (TÓPICO):
     {question}
@@ -117,13 +117,13 @@ prompt_template_desafio = ChatPromptTemplate.from_template("""
     1.  **Base no Contexto:** Os desafios DEVEM ser 100% baseados no contexto fornecido.
     2.  **Formato JSON OBRIGATÓRIO:** Sua resposta DEVE ser um único ARRAY JSON válido, contendo 3 objetos de desafio. NÃO inclua ```json ```.
     3.  **SEMPRE CRIE 3 DESAFIOS.**
-    4.  **VARIAÇÃO DE TIPO:** Tente variar os tipos ("multiple-choice", "code", "essay").
+    4.  **TIPO OBRIGATÓRIO: "multiple-choice"**: Todos os 3 desafios criados DEVEM ser do tipo "multiple-choice".
     5.  **NÃO REPITA PERGUNTAS:** Garanta que os 3 desafios sejam diferentes entre si.
     6.  **ESPECIFICIDADE (MUITO IMPORTANTE):**
         * Os desafios devem ser específicos sobre o TÓPICO ({question}).
         * Evite perguntas genéricas (ex: "O que é...?").
-        * Se o TÓPICO for uma linguagem de programação (ex: "Python", "JavaScript", "C++"), crie pelo menos um desafio de código (type: "code") baseado na sintaxe ou conceitos do contexto.
-        * Se o TÓPICO for um projeto (ex: "Syna", "Cachorros"), crie perguntas sobre seus componentes, arquitetura, funcionalidades ou dados específicos descritos no contexto.
+        * Crie perguntas sobre componentes, arquitetura, funcionalidades ou dados específicos descritos no contexto.
+    7.  **REGRAS DE "multiple-choice":** Cada desafio deve ter 3 ou 4 opções em "options" e um "correctOptionId" válido.
 
     === ESTRUTURA JSON ESPERADA (ARRAY DE 3 OBJETOS) ===
     [
@@ -131,15 +131,19 @@ prompt_template_desafio = ChatPromptTemplate.from_template("""
         "id": "string",
         "title": "string",
         "description": "string",
-        "type": "string (multiple-choice, code, ou essay)",
+        "type": "multiple-choice",
         "difficulty": "string (easy, medium, ou hard)",
-        "options": [],
-        "correctOptionId": "",
-        "codeTemplate": "",
-        "expectedOutput": ""
+        "options": [
+            {{"id": "1", "text": "Texto da Opção 1"}},
+            {{"id": "2", "text": "Texto da Opção 2"}},
+            {{"id": "3", "text": "Texto da Opção 3"}}
+        ],
+        "correctOptionId": "string (ex: '2')",
+        "codeTemplate": null,
+        "expectedOutput": null
       }},
-      {{ ... segundo desafio ... }},
-      {{ ... terceiro desafio ... }}
+      {{ ... segundo desafio (multiple-choice) ... }},
+      {{ ... terceiro desafio (multiple-choice) ... }}
     ]
     
     Se não for possível gerar desafios com o contexto, retorne um array com um objeto de erro:
@@ -216,5 +220,5 @@ async def generate_challenge(request: ChatRequest) -> ChallengeResponse:
 
 if __name__ == "__main__":
     import uvicorn
-    print("Iniciando a API de DESAFIOS (v2 - Múltiplos Desafios) em http://localhost:8001")
+    print("Iniciando a API de DESAFIOS (v2 - Apenas Múltipla Escolha) em http://localhost:8001")
     uvicorn.run(app, host="0.0.0.0", port=8001)
