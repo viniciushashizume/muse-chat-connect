@@ -110,3 +110,5 @@ In a **new terminal**, set up and run the React frontend.
     The React application will start and be accessible in your browser (usually at `http://localhost:5173`).
 
 You can now interact with the chat interface, which will send requests to your local RAG API.
+
+This project is still under development.
