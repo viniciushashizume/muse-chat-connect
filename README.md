@@ -1,155 +1,114 @@
-# Agente LABRIOT: Aplicativo de Chat RAG
+# Agente LABRIOT: RAG Chat Application
 
-Este repositório contém um aplicativo de chat completo, projetado para responder a perguntas sobre documentos específicos. Ele apresenta um frontend React/Vite e um backend Python/FastAPI que utiliza a Geração Aumentada por Recuperação (RAG) com o modelo Gemini do Google.
+This repository contains a complete chat application designed to answer questions about specific documents. It features a React/Vite frontend and a Python/FastAPI backend that utilizes Augmented Generation by Retrieval (RAG) with Google's Gemini model.
 
-A API do backend indexa documentos PDF locais e os utiliza como base de conhecimento para fornecer respostas contextuais às consultas dos usuários e gerar desafios com base em áreas de aprendizado.
+The backend API indexes local PDF documents and uses them as a knowledge base to provide contextual answers to user queries and generate challenges based on learning areas.
 
-## Pilha de Tecnologias
+## Technology Stack
 
 ### Frontend
 * **Framework:** [React](https://react.dev/)
-* **Ferramenta de Build:** [Vite](https://vitejs.dev/)
-* **Linguagem:** [TypeScript](https://www.typescriptlang.org/)
-* **Interface do Usuário:** [shadcn/ui](https://ui.shadcn.com/)
-* **Estilização:** [Tailwind CSS](https://tailwindcss.com/)
-* **Roteamento:** [React Router](https://reactrouter.com/)
+* **Build Tool:** [Vite](https://vitejs.dev/)
+* **Language:** [TypeScript](https://www.typescriptlang.org/)
+* **UI:** [shadcn/ui](https://ui.shadcn.com/)
+* **Styling:** [Tailwind CSS](https://tailwindcss.com/)
+* **Routing:** [React Router](https://reactrouter.com/)
 
 ### Backend (RAG API)
 * **Framework:** [FastAPI](https://fastapi.tiangolo.com/)
-* **Servidor:** [Uvicorn](https://www.uvicorn.org/)
-* **Orquestração:** [LangChain](https://www.langchain.com/)
+* **Server:** [Uvicorn](https://www.uvicorn.org/)
+* **Orchestration:** [LangChain](https://www.langchain.com/)
 * **LLM:** [Google Gemini (via `langchain-google-genai`)](https://python.langchain.com/docs/integrations/chat/google_generative_ai)
 * **Embeddings:** [Sentence-Transformers (`all-MiniLM-L6-v2`)](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2)
 * **Vector Store:** [FAISS (faiss-cpu)](https://faiss.ai/)
 * **Document Loading:** [PyPDFLoader](https://python.langchain.com/docs/integrations/document_loaders/pdf)
 
-## Pré-requisitos
+## Prerequisites
 
-Antes de começar, certifique-se de ter o seguinte instalado:
-* [Node.js](https://nodejs.org/) (versão 18 ou posterior recomendada) e npm
-* [Python](https://www.python.org/) (versão 3.9 ou posterior recomendada) e pip
-* Uma **Chave da API do Google** para o modelo Gemini. Você pode obter uma no [Google AI Studio](https://aistudio.google.com/app/apikey).
+Before you begin, ensure you have the following installed:
+* [Node.js](https://nodejs.org/) (v18 or later recommended) & npm
+* [Python](https://www.python.org/) (v3.9 or later recommended) & pip
+* A **Google API Key** for the Gemini model. You can get one from [Google AI Studio](https://aistudio.google.com/app/apikey).
 
-## Como executar
+## How to Run
 
-Este projeto consiste em duas partes: a **API de backend** e o **Aplicativo de frontend**. Você precisará executá-los em dois terminais separados.
+This project consists of two parts: the **Backend API** and the **Frontend Application**. You will need to run them in two separate terminals.
 
-### 1. Configuração do backend (API RAG)
+### 1. Backend Setup (RAG API)
 
-Primeiro, configure e execute o backend em Python.
+First, set up and run the Python backend.
 
-1. **Navegue até o diretório da API:**
+1.  **Navigate to the API directory:**
+    ```sh
+    cd rag-api
+    ```
 
-``sh
+2.  **Create a virtual environment** (recommended):
+    ```sh
+    python -m venv venv
+    source venv/bin/activate  # On Windows, use: venv\Scripts\activate
+    ```
 
-cd rag-api
+3.  **Install Python dependencies:**
+    ```sh
+    pip install -r requirements.txt
+    ```
 
-```
+4.  **Add your documents:**
+    The API is configured to load specific PDFs. Make sure the following files are present in the `rag-api/` directory:
+    * `Documentação Syna.pdf`
+    * `Python do ZERO à Programação Orientada a Objetos (Fernando Belomé Feltrin).pdf`
 
-2. **Crie um ambiente virtual** (recomendado):
+5.  **Create an environment file:**
+    Create a file named `.env` in the `rag-api/` directory. You will need to add your Google API key here.
+    ```
+    # rag-api/.env
+    GOOGLE_API_KEY="YOUR_GOOGLE_API_KEY_HERE"
+    ```
+    *Note: The application uses `dotenv` to load this key.*
 
-``sh
+6.  **Run the API server:**
+    ```sh
+    uvicorn main:app --reload --port 8000
+    ```
+    The API will start, load the PDF documents, create the vector store, and be available at `http://localhost:8000`.
 
-python -m venv venv
+    For the challenge-creating agent run:
+    ```sh
+    uvicorn challenge_agent:app --reload --port 8001
+    ```
+    For the answer-validation agent run:
+    ```sh
+    uvicorn validation_agent:app --reload --port 8002
+    ```
 
-source venv/bin/activate # No Windows, use: venv\Scripts\activate
+### 2. Frontend Setup
 
-```
+In a **new terminal**, set up and run the React frontend.
 
-3. **Instale as dependências do Python:**
+1.  **Navigate to the project's root directory** (if you are in `rag-api`, go back):
+    ```sh
+    cd ..
+    ```
 
-``sh
+2.  **Install Node.js dependencies:**
+    ```sh
+    npm i
+    ```
 
-pip install -r requirements.txt
+3.  **Create an environment file:**
+    Create a file named `.env` in the root directory. This tells the frontend where to find the API.
+    ```
+    # /.env
+    VITE_API_URL=http://localhost:8000
+    ```
 
-```
+4.  **Run the development server:**
+    ```sh
+    npm run dev
+    ```
+    The React application will start and be accessible in your browser (usually at `http://localhost:5173`).
 
-4. **Adicione seus documentos:**
+You can now interact with the chat interface, which will send requests to your local RAG API.
 
-A API está configurada para carregar PDFs específicos. Certifique-se de que os seguintes arquivos estejam presentes no diretório `rag-api/`:
-
-* `Documentação Syna.pdf`
-
-* `Python do ZERO à Programação Orientada a Objetos (Fernando Belomé Feltrin).pdf`
-
-5. **Crie um arquivo de ambiente:**
-
-Crie um arquivo chamado `.env` no diretório `rag-api/`. Você precisará adicionar sua chave da API do Google aqui.
-
-``
-# rag-api/.env
-
-GOOGLE_API_KEY="SUA_CHAVE_DA_API_DO_GOOGLE_AQUI"
-
-``
-
-*Observação: o aplicativo usa o `dotenv` para carregar esta chave.*
-
-6. **Execute o servidor da API:**
-
-``sh
-
-uvicorn main:app --reload --port 8000
-
-``
-A API será iniciada, carregará os documentos PDF, criará o armazenamento vetorial e estará disponível em `http://localhost:8000`.
-
-Para o agente de criação de desafios, execute:
-
-``sh
-
-uvicorn challenge_agent:app --reload --port 8001
-
-``
-
-Para o agente de validação de respostas, execute:
-
-``sh
-
-uvicorn validation_agent:app --reload --port 8002
-
-``
-
-### 2. Configuração do Frontend
-
-Em um **novo terminal**, configure e execute o frontend React.
-
-1. **Navegue até o diretório raiz do projeto** (se você estiver em `rag-api`, volte):
-
-``sh
-
-cd ..
-
-```
-
-2. **Instale as dependências do Node.js:**
-
-``sh
-
-npm i
-
-```
-
-3. **Crie um arquivo de ambiente:**
-
-Crie um arquivo chamado `.env` no diretório raiz. Isso informa ao frontend onde encontrar a API.
-
-```
-
-# /.env
-
-VITE_API_URL=http://localhost:8000
-```
-
-4. **Execute o servidor de desenvolvimento:**
-
-```sh
-
-npm run dev
-
-```
-O aplicativo React será iniciado e estará acessível no seu navegador (geralmente em `http://localhost:5173`).
-
-Agora você pode interagir com a interface de chat, que enviará solicitações para a sua API RAG local.
-
-Este projeto ainda está em desenvolvimento.
+This project is still under development.
