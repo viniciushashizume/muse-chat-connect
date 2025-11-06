@@ -47,25 +47,27 @@ separados.
 
  Primeiro, configure e execute o backend Python. 
 
- 1.  **Navegue até o diretório da API:**     ```sh 
+ 1.  **Navegue até o diretório da API:**
+ 2.  ```sh 
      cd rag-api 
      ``` 
 
- 2.  **Crie um ambiente virtual** (recomendado): 
+ 3.  **Crie um ambiente virtual** (recomendado): 
      ```sh 
      python -m venv venv 
      source venv/bin/activate  # No Windows, use: venv\Scripts\activate 
      ``` 
 
- 3.  **Instale as dependências do Python:**     ```sh 
+ 4.  **Instale as dependências do Python:**
+ 5.  ```sh 
      pip install -r requirements.txt 
      ``` 
 
- 4.  **Adicione seus documentos:**     A API está configurada para carregar PDFs específicos. Certifique-se de que os seguintes arquivos estejam presentes no diretório `rag-api/`: 
+ 6.  **Adicione seus documentos:**     A API está configurada para carregar PDFs específicos. Certifique-se de que os seguintes arquivos estejam presentes no diretório `rag-api/`: 
      * `Documentação Syna.pdf` 
      * `Python do ZERO à Programação Orientada a Objetos (Fernando Belomé Feltrin).pdf` 
 
- 5.  **Crie um arquivo de ambiente:**     Crie um arquivo chamado `.env` no diretório `rag-api/`. Você precisará adicionar sua chave de API do Google aqui. 
+ 7.  **Crie um arquivo de ambiente:**     Crie um arquivo chamado `.env` no diretório `rag-api/`. Você precisará adicionar sua chave de API do Google aqui. 
      ``` 
      # rag-api/.env 
      GOOGLE_API_KEY="SUA_CHAVE_API_GOOGLE_AQUI" 
