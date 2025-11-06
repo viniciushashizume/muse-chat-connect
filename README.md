@@ -1,8 +1,8 @@
 # Agente LABRIOT: RAG Chat Application
 
-This repository contains a full-stack chat application designed to answer questions about specific documents. It features a React/Vite frontend and a Python/FastAPI backend that uses Retrieval-Augmented Generation (RAG) with Google's Gemini model.
+This repository contains a complete chat application designed to answer questions about specific documents. It features a React/Vite frontend and a Python/FastAPI backend that utilizes Augmented Generation by Retrieval (RAG) with Google's Gemini model.
 
-The backend API indexes local PDF documents and uses them as a knowledge base to provide context-aware answers to user queries.
+The backend API indexes local PDF documents and uses them as a knowledge base to provide contextual answers to user queries and generate challenges based on learning areas.
 
 ## Technology Stack
 
@@ -72,6 +72,15 @@ First, set up and run the Python backend.
     uvicorn main:app --reload --port 8000
     ```
     The API will start, load the PDF documents, create the vector store, and be available at `http://localhost:8000`.
+
+    For the challenge-creating agent run:
+    ```sh
+    uvicorn challenge_agent:app --reload --port 8001
+    ```
+    For the answer-validation agent run:
+    ```sh
+    uvicorn validation_agent:app --reload --port 8002
+    ```
 
 ### 2. Frontend Setup
 
