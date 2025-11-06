@@ -70,13 +70,14 @@ separados.
      # rag-api/.env 
      GOOGLE_API_KEY="SUA_CHAVE_API_GOOGLE_AQUI" 
      ``` 
-     *Nota: A aplicação usa `dotenv` para carregar esta chave.* 6.  **Execute o servidor da API:**     ```sh 
+     *Nota: A aplicação usa `dotenv` para carregar esta chave.* 6.  **Execute o servidor da API:**
+     ```sh 
      uvicorn main:app --reload --port 8000 
      ``` 
      A API será iniciada, carregará os documentos PDF, criará o armazenamento vetorial e estará disponível em `http://localhost:8000`. 
 
      Para o agente de criação de desafios, execute: 
-     ```sh 
+     ```sh
      uvicorn challenge_agent:app --reload --port 8001 
      ``` 
      Para o agente de validação de respostas, execute: 
@@ -93,17 +94,18 @@ separados.
      cd .. 
      ``` 
 
- 2.  **Instale as dependências do Node.js:**     ```sh 
+ 2.  **Instale as dependências do Node.js:**
+ 3.  ```sh 
      npm i 
      ``` 
 
- 3.  **Crie um arquivo de ambiente:**     Crie um arquivo chamado `.env` no diretório raiz. Isso informa ao frontend onde encontrar a API. 
+ 4.  **Crie um arquivo de ambiente:**     Crie um arquivo chamado `.env` no diretório raiz. Isso informa ao frontend onde encontrar a API. 
      ``` 
      # /.env 
      VITE_API_URL=http://localhost:8000 
      ``` 
 
- 4.  **Execute o servidor de desenvolvimento:**     ```sh 
+ 5.  **Execute o servidor de desenvolvimento:**     ```sh 
      npm run dev 
      ``` 
      A aplicação React será iniciada e estará acessível no seu navegador (geralmente em `http://localhost:5173`). 
