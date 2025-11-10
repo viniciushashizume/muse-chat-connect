@@ -155,6 +155,7 @@ prompt_template_validation = ChatPromptTemplate.from_template("""
 """)
 # --- Fim do Prompt ---
 
+# ... AGENT_CARD e get_agent_card() sem alterações ...
 AGENT_CARD = {
   "a2a_version": "0.1.0",
   "id": "agent-challenge-validator-v1",
@@ -194,7 +195,6 @@ async def get_agent_card():
     """
     return AGENT_CARD
 
-# --- FIM DA MODIFICAÇÃO A2A ---
 
 @app.post("/api/validate", response_model=ValidationResponse)
 async def validate_answer(request: ValidationRequest) -> ValidationResponse:
@@ -210,48 +210,46 @@ async def validate_answer(request: ValidationRequest) -> ValidationResponse:
         )
 
     try:
-        # --- LÓGICA DE CHAIN CORRIGIDA ---
+        # --- LÓGICA DE CHAIN REFEITA (v2.3) ---
 
-        # 1. Chain do Retriever: Busca o "gabarito" (contexto) usando APENAS o desafio.
-        #    O 'itemgetter' pega os dados do input da chain principal.
+        # 1. Cadeia do retriever (sem alterações, esta parte estava correta)
         retriever_chain = (
-            {
-                # Extrai os dados do objeto 'challenge' que vem no input
-                "title": lambda x: x['challenge'].get('title', ''),
-                "description": lambda x: x['challenge'].get('description', '')
-            }
-            # Formata a query para o retriever buscar a RESPOSTA/GABARITO
-            | ChatPromptTemplate.from_template(
+            ChatPromptTemplate.from_template(
                 "Qual é a resposta ou o contexto relevante para este desafio: '{title}' - '{description}'?"
-              )
-            | retriever
+            )
+            | StrOutputParser() # Converte o ChatPromptValue para string
+            | retriever         # O retriever agora recebe a string
         )
-        
-        # 2. Chain RAG Principal: Combina o gabarito (context) com o resto dos dados.
+
+        # 2. Cadeia RAG principal
         rag_chain = (
-            {
-                # O 'context' é buscado dinamicamente pela 'retriever_chain'
-                "context": retriever_chain,
-                # Os outros campos são passados diretamente do input
-                "challenge_json": lambda x: json.dumps(x['challenge']),
-                "user_answer": itemgetter("user_answer") # Pega a string 'user_answer' do input
-            }
-            | prompt_template_validation # O novo prompt, mais rígido
-            | llm
+            RunnablePassthrough.assign(
+                context=lambda x: retriever_chain.invoke(x['challenge']),
+                challenge_json=lambda x: json.dumps(x['challenge']),
+                user_answer=itemgetter("user_answer")
+            )
+            | prompt_template_validation # Output: ChatPromptValue
+            
+            # +++ CORREÇÃO (v2.3) +++
+            # Adicionamos um StrOutputParser AQUI.
+            # Isso força a conversão do ChatPromptValue em uma 'string'
+            # antes de enviá-lo ao 'llm', resolvendo o erro de tipo.
+            | StrOutputParser()
+            
+            | llm                        # Agora o LLM recebe a string que ele espera
             | StrOutputParser()
         )
 
-        # Monta o input para a chain principal
-        # O input agora é um dicionário contendo o objeto challenge e a string user_answer
+        # 3. Monta o input para a chain principal
         chain_input = {
             "challenge": request.challenge, # O objeto JSON completo do desafio
             "user_answer": request.user_answer  # A string da resposta do usuário
         }
         
-        # Invoca a chain de validação
+        # 4. Invoca a chain de validação
         bot_response_string = rag_chain.invoke(chain_input)
         
-        # --- Fim da Lógica de Chain Corrigida ---
+        # --- Fim da Lógica de Chain Refeita ---
         
         try:
             # Limpeza
@@ -289,5 +287,6 @@ async def validate_answer(request: ValidationRequest) -> ValidationResponse:
 
 if __name__ == "__main__":
     import uvicorn
-    print("Iniciando a API de VALIDAÇÃO (v2 - Corrigida) em http://localhost:8002")
+    # Atualize a mensagem de print para sabermos qual versão está rodando
+    print("Iniciando a API de VALIDAÇÃO (v2.3 - Corrigido com Parser antes do LLM) em http://localhost:8002")
     uvicorn.run(app, host="0.0.0.0", port=8002)

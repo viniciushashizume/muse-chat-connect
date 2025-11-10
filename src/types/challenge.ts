@@ -1,7 +1,9 @@
-// --- ALTERAÇÃO: Adicionado "essay" ---
-export type ChallengeType = "multiple-choice" | "code" | "essay" | "error";
+// src/types/challenge.ts
 
-export interface MultipleChoiceOption {
+export type ChallengeType = "multiple-choice" | "essay" | "code" | "error";
+export type ChallengeDifficulty = "easy" | "medium" | "hard" | "none";
+
+export interface ChallengeOption {
   id: string;
   text: string;
 }
@@ -11,20 +13,12 @@ export interface Challenge {
   title: string;
   description: string;
   type: ChallengeType;
-  difficulty: "easy" | "medium" | "hard" | "none"; // Adicionado "none" para erros
-  
-  // Para múltipla escolha
-  options?: MultipleChoiceOption[];
+  difficulty: ChallengeDifficulty;
+  options?: ChallengeOption[];
   correctOptionId?: string;
-  
-  // Para código
-  codeTemplate?: string;
   expectedOutput?: string;
-
-  // Para 'essay', nenhum campo extra é necessário
-  
-  // Resposta do usuário
   userAnswer?: string;
   isCorrect?: boolean;
   completed?: boolean;
+  feedback?: string; // <<< ADICIONADO
 }

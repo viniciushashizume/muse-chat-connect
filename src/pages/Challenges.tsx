@@ -6,7 +6,8 @@ import { ChallengeCard } from "@/components/challenges/ChallengeCard";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, ArrowLeft, ArrowRight, CheckCircle2, Settings } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { generateChallenges } from "@/lib/api";
+// 1. IMPORTAR A FUNÇÃO DE VALIDAÇÃO
+import { generateChallenges, validateChallengeAnswer } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Challenges() {
@@ -15,6 +16,10 @@ export default function Challenges() {
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentChallengeIndex, setCurrentChallengeIndex] = useState(0);
+  
+  // 2. ADICIONAR ESTADO DE "SUBMETENDO" PARA O CARD
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const { toast } = useToast();
   
   const selectedArea = searchParams.get("area") || "";
@@ -71,61 +76,63 @@ export default function Challenges() {
     }
   };
 
-  const handleSubmitAnswer = (challengeId: string, answer: string) => {
+  // 3. TRANSFORMAR A FUNÇÃO EM ASYNC E IMPLEMENTAR A LÓGICA DE VALIDAÇÃO
+  const handleSubmitAnswer = async (challengeId: string, answer: string) => {
     const currentChallenge = challenges[currentChallengeIndex];
-    if (!currentChallenge || currentChallenge.id !== challengeId) return;
+    // Bloqueia nova submissão se uma já estiver em andamento
+    if (!currentChallenge || currentChallenge.id !== challengeId || isSubmitting) return;
 
-    const isCorrect = (() => {
-      if (currentChallenge.type === "multiple-choice") {
-        return answer === currentChallenge.correctOptionId;
-      }
-      if (currentChallenge.type === "code") {
-        return answer.includes(currentChallenge.expectedOutput || "return");
-      }
-      if (currentChallenge.type === "essay") {
-        return true;
-      }
-      return false;
-    })();
+    setIsSubmitting(true); // Ativa o estado de "submetendo"
 
-    setChallenges((prev) =>
-      prev.map((c, index) => {
-        if (index === currentChallengeIndex) {
-          return {
-            ...c,
-            userAnswer: answer,
-            isCorrect: isCorrect,
-            completed: isCorrect // Só marca como 'completed' se a resposta for correta
-          };
-        }
-        return c;
-      })
-    );
+    try {
+      // 4. CHAMAR A API DE VALIDAÇÃO REAL
+      const validationResponse = await validateChallengeAnswer(currentChallenge, answer);
+      const { is_correct, feedback } = validationResponse;
 
-    toast({
-      title: isCorrect ? "Resposta Correta!" : "Resposta Incorreta.",
-      // 2. MENSAGEM DO TOAST ATUALIZADA
-      description: isCorrect
-        ? "Bom trabalho! Use os botões de navegação para continuar."
-        : "Tente novamente. A resposta não está correta.",
-      variant: isCorrect ? "default" : "destructive",
-    });
+      // 5. ATUALIZAR O ESTADO COM O RESULTADO DA API
+      setChallenges((prev) =>
+        prev.map((c, index) => {
+          if (index === currentChallengeIndex) {
+            return {
+              ...c,
+              userAnswer: answer,
+              isCorrect: is_correct,
+              completed: is_correct, // Só marca como 'completed' se a resposta for correta
+              feedback: feedback, // Armazena o feedback no objeto do desafio
+            };
+          }
+          return c;
+        })
+      );
 
-    // 3. AVANÇO AUTOMÁTICO REMOVIDO
-    // O setTimeout e o setCurrentChallengeIndex foram removidos daqui
+      // 6. MOSTRAR O TOAST COM O FEEDBACK REAL DA API
+      toast({
+        title: is_correct ? "Resposta Correta!" : "Resposta Incorreta.",
+        description: feedback, // Usa o feedback vindo do Agente de Validação
+        variant: is_correct ? "default" : "destructive",
+      });
+
+    } catch (error) {
+      console.error("Falha ao validar resposta:", error);
+      toast({
+        title: "Erro ao validar",
+        description: "Não foi possível conectar ao agente de validação. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false); // Desativa o estado de "submetendo"
+    }
   };
 
-  // 4. NOVAS FUNÇÕES DE NAVEGAÇÃO
+  // ... (Funções de navegação e getAreaName não mudam) ...
   const goToPreviousChallenge = () => {
     setCurrentChallengeIndex((prevIndex) => Math.max(0, prevIndex - 1));
   };
 
   const goToNextChallenge = () => {
-    // Avança para o próximo, sem ultrapassar o tamanho do array
     setCurrentChallengeIndex((prevIndex) => Math.min(challenges.length, prevIndex + 1));
   };
   
-  // Variável auxiliar para saber se estamos no último desafio
   const isLastChallenge = currentChallengeIndex === challenges.length - 1;
 
   const getAreaName = (area: string) => {
@@ -139,6 +146,7 @@ export default function Challenges() {
     };
     return areaNames[area] || area;
   };
+
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-background to-muted/20">
@@ -175,15 +183,16 @@ export default function Challenges() {
               <Skeleton className="h-80 w-full max-w-2xl rounded-lg" />
             </div>
           ) : challenges.length > 0 && currentChallengeIndex < challenges.length ? (
-            // 5. WRAPPER PARA CENTRALIZAR O CARD E OS BOTÕES
             <div className="max-w-2xl mx-auto">
               <ChallengeCard
                 key={challenges[currentChallengeIndex].id}
                 challenge={challenges[currentChallengeIndex]}
                 onSubmit={handleSubmitAnswer}
+                // 7. PASSAR O ESTADO PARA O CARD (para desabilitar o botão)
+                isSubmitting={isSubmitting} 
               />
               
-              {/* 6. BOTÕES DE NAVEGAÇÃO */}
+              {/* ... (Botões de navegação sem alteração) ... */}
               <div className="flex justify-between mt-6">
                 <Button 
                   onClick={goToPreviousChallenge} 
@@ -196,8 +205,6 @@ export default function Challenges() {
                 
                 <Button 
                   onClick={goToNextChallenge}
-                  // Opcional: Se quiser FORÇAR o acerto antes de avançar, descomente a linha abaixo
-                  // disabled={!challenges[currentChallengeIndex]?.completed}
                   variant="default"
                 >
                   {isLastChallenge ? 'Finalizar' : 'Próximo'}
@@ -206,11 +213,11 @@ export default function Challenges() {
               </div>
             </div>
           ) : challenges.length > 0 && currentChallengeIndex >= challenges.length ? (
-            // (B) FIM DOS DESAFIOS: Mostra mensagem de conclusão
+            // ... (Mensagem de conclusão sem alteração) ...
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <p className="text-xl font-semibold mb-4">Parabéns!</p>
               <p className="text-muted-foreground mb-4">
-                Você completou todos os desafios de "{selectedArea}".
+                Você completou todos os desafios de "{getAreaName(selectedArea)}".
               </p>
               <Button onClick={generateNewChallenges} disabled={isLoading}>
                 <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
@@ -218,10 +225,10 @@ export default function Challenges() {
               </Button>
             </div>
           ) : (
-            // (C) ESTADO INICIAL: Mensagem para gerar desafios
+            // ... (Mensagem inicial sem alteração) ...
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <p className="text-muted-foreground mb-4">
-                Nenhum desafio disponível para "{selectedArea}". Clique em "Gerar Novos Desafios" para começar!
+                Nenhum desafio disponível para "{getAreaName(selectedArea)}". Clique em "Gerar Novos Desafios" para começar!
               </p>
             </div>
           )}
