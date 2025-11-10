@@ -12,9 +12,10 @@ import { CheckCircle2, XCircle } from "lucide-react";
 interface ChallengeCardProps {
   challenge: Challenge;
   onSubmit: (challengeId: string, answer: string) => void;
+  isSubmitting?: boolean;
 }
 
-export function ChallengeCard({ challenge, onSubmit }: ChallengeCardProps) {
+export function ChallengeCard({ challenge, onSubmit, isSubmitting}: ChallengeCardProps) {
   // --- 1. ESTADO INTERNO 'submitted' REMOVIDO ---
 
   // Estados para controlar os inputs (isso está correto)
