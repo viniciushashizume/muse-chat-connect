@@ -42,12 +42,9 @@ except Exception as e:
 # LLM para validação (temperatura baixa para ser um "juiz" rigoroso)
 llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.1) 
 
-# --- Lógica de carregamento de múltiplos documentos ---
-# (Esta seção é IDÊNTICA aos outros agentes para garantir que ele "leia" os mesmos documentos)
 lista_de_documentos_pdf = [
     "Documentação Syna.pdf",
     "Python do ZERO à Programação Orientada a Objetos (Fernando Belomé Feltrin).pdf"
-    # Adicione aqui os PDFs de JavaScript, C++, Cachorros, etc.
 ]
 documentos_totais = []
 print("Iniciando o carregamento dos documentos locais (Agente de Validação)...")
@@ -102,7 +99,6 @@ class ValidationResponse(BaseModel):
     is_correct: bool
     feedback: str
 
-# --- PROMPT TEMPLATE DE VALIDAÇÃO (MAIS RIGOROSO) ---
 prompt_template_validation = ChatPromptTemplate.from_template("""
     Você é um Agente Avaliador robótico e implacável. Sua única missão é
     determinar se a "RESPOSTA DO USUÁRIO" é factualmente correta,
@@ -153,9 +149,8 @@ prompt_template_validation = ChatPromptTemplate.from_template("""
 
     OBJETO JSON DE AVALIAÇÃO:
 """)
-# --- Fim do Prompt ---
 
-# ... AGENT_CARD e get_agent_card() sem alterações ...
+
 AGENT_CARD = {
   "a2a_version": "0.1.0",
   "id": "agent-challenge-validator-v1",
@@ -210,46 +205,48 @@ async def validate_answer(request: ValidationRequest) -> ValidationResponse:
         )
 
     try:
-        # --- LÓGICA DE CHAIN REFEITA (v2.3) ---
+        # --- LÓGICA DE CHAIN CORRIGIDA ---
 
-        # 1. Cadeia do retriever (sem alterações, esta parte estava correta)
+        # 1. Chain do Retriever: Busca o "gabarito" (contexto) usando APENAS o desafio.
+        #    O 'itemgetter' pega os dados do input da chain principal.
         retriever_chain = (
-            ChatPromptTemplate.from_template(
+            {
+                # Extrai os dados do objeto 'challenge' que vem no input
+                "title": lambda x: x['challenge'].get('title', ''),
+                "description": lambda x: x['challenge'].get('description', '')
+            }
+            # Formata a query para o retriever buscar a RESPOSTA/GABARITO
+            | ChatPromptTemplate.from_template(
                 "Qual é a resposta ou o contexto relevante para este desafio: '{title}' - '{description}'?"
-            )
-            | StrOutputParser() # Converte o ChatPromptValue para string
-            | retriever         # O retriever agora recebe a string
+              )
+            | retriever
         )
-
-        # 2. Cadeia RAG principal
+        
+        # 2. Chain RAG Principal: Combina o gabarito (context) com o resto dos dados.
         rag_chain = (
-            RunnablePassthrough.assign(
-                context=lambda x: retriever_chain.invoke(x['challenge']),
-                challenge_json=lambda x: json.dumps(x['challenge']),
-                user_answer=itemgetter("user_answer")
-            )
-            | prompt_template_validation # Output: ChatPromptValue
-            
-            # +++ CORREÇÃO (v2.3) +++
-            # Adicionamos um StrOutputParser AQUI.
-            # Isso força a conversão do ChatPromptValue em uma 'string'
-            # antes de enviá-lo ao 'llm', resolvendo o erro de tipo.
-            | StrOutputParser()
-            
-            | llm                        # Agora o LLM recebe a string que ele espera
+            {
+                # O 'context' é buscado dinamicamente pela 'retriever_chain'
+                "context": retriever_chain,
+                # Os outros campos são passados diretamente do input
+                "challenge_json": lambda x: json.dumps(x['challenge']),
+                "user_answer": itemgetter("user_answer") # Pega a string 'user_answer' do input
+            }
+            | prompt_template_validation # O novo prompt, mais rígido
+            | llm
             | StrOutputParser()
         )
 
-        # 3. Monta o input para a chain principal
+        # Monta o input para a chain principal
+        # O input agora é um dicionário contendo o objeto challenge e a string user_answer
         chain_input = {
             "challenge": request.challenge, # O objeto JSON completo do desafio
             "user_answer": request.user_answer  # A string da resposta do usuário
         }
         
-        # 4. Invoca a chain de validação
+        # Invoca a chain de validação
         bot_response_string = rag_chain.invoke(chain_input)
         
-        # --- Fim da Lógica de Chain Refeita ---
+        # --- Fim da Lógica de Chain Corrigida ---
         
         try:
             # Limpeza
@@ -287,6 +284,5 @@ async def validate_answer(request: ValidationRequest) -> ValidationResponse:
 
 if __name__ == "__main__":
     import uvicorn
-    # Atualize a mensagem de print para sabermos qual versão está rodando
-    print("Iniciando a API de VALIDAÇÃO (v2.3 - Corrigido com Parser antes do LLM) em http://localhost:8002")
+    print("Iniciando a API de VALIDAÇÃO em http://localhost:8002")
     uvicorn.run(app, host="0.0.0.0", port=8002)

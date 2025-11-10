@@ -71,9 +71,6 @@ if documentos_totais:
     print(f"Criando Vector DB com {len(chunks)} chunks de {len(lista_de_documentos_pdf)} documento(s)...")
     vector_db = FAISS.from_documents(chunks, embeddings)
     
-    # --- ALTERAÇÃO: Mudar para MMR (Maximal Marginal Relevance) para diversidade ---
-    # fetch_k=30: Busca os 30 chunks mais relevantes
-    # k=10:      Seleciona os 10 melhores que também são mais diferentes entre si
     retriever = vector_db.as_retriever(
         search_type="mmr",
         search_kwargs={"k": 10, "fetch_k": 30}
@@ -97,11 +94,9 @@ app.add_middleware(
 class ChatRequest(BaseModel):
     message: str
 
-# --- ALTERAÇÃO: O modelo de resposta agora espera uma LISTA de desafios ---
 class ChallengeResponse(BaseModel):
     challenges: List[Any] # Alterado de 'challenge: Any' para 'challenges: List[Any]'
 
-# --- ALTERAÇÃO: Prompt focado APENAS em Múltipla Escolha ---
 prompt_template_desafio = ChatPromptTemplate.from_template("""
     Você é um "Mestre de Desafios" e sua especialidade é criar desafios de múltipla escolha com base em documentações técnicas, formatando a saída como um array JSON.
 
@@ -153,8 +148,6 @@ prompt_template_desafio = ChatPromptTemplate.from_template("""
 
     ARRAY JSON DE 3 DESAFIOS GERADOS:
 """)
-# --- Fim da Alteração do Prompt ---
-
 # Defina o Agent Card como um dicionário Python
 AGENT_CARD = {
   "a2a_version": "0.1.0",
@@ -214,13 +207,11 @@ async def generate_challenge(request: ChatRequest) -> ChallengeResponse:
     )
 
     try:
-        # A 'request.message' agora conterá "Python", "Syna", "JavaScript", etc.
         bot_response_string = rag_chain.invoke(request.message) 
         try:
             # Limpeza
             clean_response_string = bot_response_string.strip().lstrip("```json").rstrip("```").strip()
             
-            # --- ALTERAÇÃO: Espera um array (começa com '[') ---
             json_start = clean_response_string.find('[')
             json_end = clean_response_string.rfind(']')
             
