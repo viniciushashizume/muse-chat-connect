@@ -155,6 +155,46 @@ prompt_template_validation = ChatPromptTemplate.from_template("""
 """)
 # --- Fim do Prompt ---
 
+AGENT_CARD = {
+  "a2a_version": "0.1.0",
+  "id": "agent-challenge-validator-v1",
+  "name": "Avaliador Implacável",
+  "description": "Um agente especialista em validar se uma resposta de usuário é correta, baseado em documentação.",
+  "capabilities": [
+    {
+      "id": "validate-answer",
+      "description": "Valida a resposta de um usuário para um desafio específico.",
+      "type": "http",
+      "endpoint": "/api/validate", # Endpoint existente
+      "method": "POST",
+      "request_schema": {
+        "type": "object",
+        "properties": {
+          "challenge": { "type": "object", "description": "O objeto de desafio original" },
+          "user_answer": { "type": "string", "description": "A resposta fornecida pelo usuário" }
+        },
+        "required": ["challenge", "user_answer"]
+      },
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "is_correct": { "type": "boolean" },
+          "feedback": { "type": "string" }
+        }
+      }
+    }
+  ]
+}
+
+@app.get("/.well-known/agent.json", response_model=None)
+async def get_agent_card():
+    """
+    Endpoint de Descoberta do A2A Protocol.
+    Retorna o Agent Card que descreve as capacidades deste agente.
+    """
+    return AGENT_CARD
+
+# --- FIM DA MODIFICAÇÃO A2A ---
 
 @app.post("/api/validate", response_model=ValidationResponse)
 async def validate_answer(request: ValidationRequest) -> ValidationResponse:

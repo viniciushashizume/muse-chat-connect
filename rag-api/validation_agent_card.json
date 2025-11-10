@@ -1,0 +1,30 @@
+{
+  "a2a_version": "0.1.0",
+  "id": "agent-challenge-validator-v1",
+  "name": "Avaliador Implacável",
+  "description": "Um agente especialista em validar se uma resposta de usuário é correta, baseado em documentação.",
+  "capabilities": [
+    {
+      "id": "validate-answer",
+      "description": "Valida a resposta de um usuário para um desafio específico.",
+      "type": "http",
+      "endpoint": "/api/validate",
+      "method": "POST",
+      "request_schema": {
+        "type": "object",
+        "properties": {
+          "challenge": { "type": "object", "description": "O objeto de desafio original" },
+          "user_answer": { "type": "string", "description": "A resposta fornecida pelo usuário" }
+        },
+        "required": ["challenge", "user_answer"]
+      },
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "is_correct": { "type": "boolean" },
+          "feedback": { "type": "string" }
+        }
+      }
+    }
+  ]
+}

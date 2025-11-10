@@ -1,0 +1,28 @@
+{
+  "a2a_version": "0.1.0",
+  "id": "agent-challenge-generator-v1",
+  "name": "Mestre de Desafios",
+  "description": "Um agente especialista em criar desafios de múltipla escolha a partir de documentação técnica.",
+  "capabilities": [
+    {
+      "id": "generate-multiple-choice",
+      "description": "Gera 3 desafios de múltipla escolha sobre um tópico.",
+      "type": "http",
+      "endpoint": "/api/challenge",
+      "method": "POST",
+      "request_schema": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string", "description": "O tópico (ex: 'Python', 'Syna')" }
+        },
+        "required": ["message"]
+      },
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "challenges": { "type": "array", "items": { "type": "object" } }
+        }
+      }
+    }
+  ]
+}

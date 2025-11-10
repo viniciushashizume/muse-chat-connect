@@ -155,6 +155,43 @@ prompt_template_desafio = ChatPromptTemplate.from_template("""
 """)
 # --- Fim da Alteração do Prompt ---
 
+# Defina o Agent Card como um dicionário Python
+AGENT_CARD = {
+  "a2a_version": "0.1.0",
+  "id": "agent-challenge-generator-v1",
+  "name": "Mestre de Desafios",
+  "description": "Um agente especialista em criar desafios de múltipla escolha a partir de documentação técnica.",
+  "capabilities": [
+    {
+      "id": "generate-multiple-choice",
+      "description": "Gera 3 desafios de múltipla escolha sobre um tópico.",
+      "type": "http",
+      "endpoint": "/api/challenge", # Endpoint existente
+      "method": "POST",
+      "request_schema": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string", "description": "O tópico (ex: 'Python', 'Syna')" }
+        },
+        "required": ["message"]
+      },
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "challenges": { "type": "array", "items": { "type": "object" } }
+        }
+      }
+    }
+  ]
+}
+
+@app.get("/.well-known/agent.json", response_model=None)
+async def get_agent_card():
+    """
+    Endpoint de Descoberta do A2A Protocol.
+    Retorna o Agent Card que descreve as capacidades deste agente.
+    """
+    return AGENT_CARD
 
 # --- ALTERAÇÃO: Endpoint atualizado para 'response_model=ChallengeResponse' e lógica de array ---
 @app.post("/api/challenge", response_model=ChallengeResponse)
