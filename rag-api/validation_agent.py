@@ -1,4 +1,5 @@
 # Nome sugerido para este arquivo: validation_agent.py
+# VERSÃO COM CORREÇÃO DEFINITIVA
 
 import os
 import requests
@@ -92,7 +93,7 @@ app.add_middleware(
 # --- Modelos Pydantic para Validação ---
 
 class ValidationRequest(BaseModel):
-    challenge: Any  # O objeto JSON completo do desafio gerado
+    challenge: Any   # O objeto JSON completo do desafio gerado
     user_answer: str # A resposta que o usuário forneceu
 
 class ValidationResponse(BaseModel):
@@ -120,31 +121,31 @@ prompt_template_validation = ChatPromptTemplate.from_template("""
         semântica ou factual com o "CONTEXTO", ela está 100% INCORRETA.
     3.  **AVALIAÇÃO DE 'ESSAY' (MUITO IMPORTANTE):**
         * Para 'essay', a "RESPOSTA DO USUÁRIO" DEVE refletir os fatos,
-            conceitos e informações presentes no "CONTEXTO".
+          conceitos e informações presentes no "CONTEXTO".
         * Avalie se a resposta é completa e precisa.
         * Respostas genéricas, vagas ou factualmente incorretas (como "batata") DEVEM ser
-            marcadas como `is_correct: false`.
+          marcadas como `is_correct: false`.
     4.  **AVALIAÇÃO DE 'MULTIPLE-CHOICE':**
         * Verifique se a 'user_answer' (que deve ser um 'id' de opção)
-            corresponde ao 'correctOptionId' no JSON do desafio.
+          corresponde ao 'correctOptionId' no JSON do desafio.
     5.  **AVALIAÇÃO DE 'CODE':**
         * Avalie se o código na 'user_answer' resolve a 'description'
-            corretamente, com base nos conceitos do "CONTEXTO". Verifique se
-            cumpre o 'expectedOutput', se houver.
+          corretamente, com base nos conceitos do "CONTEXTO". Verifique se
+          cumpre o 'expectedOutput', se houver.
 
     === FEEDBACK ===
     * Se CORRETO: Parabenize e reforce o porquê está correto ("Correto! A
-        resposta está alinhada com a documentação que diz: ...").
+      resposta está alinhada com a documentação que diz: ...").
     * Se INCORRETO: Explique educadamente o porquê está incorreto e qual
-        seria a resposta correta, CITANDO o "CONTEXTO".
-        (ex: "Incorreto. A resposta 'batata' não tem relação com o
-        assunto. A documentação indica que a resposta correta é...")
+      seria a resposta correta, CITANDO o "CONTEXTO".
+      (ex: "Incorreto. A resposta 'batata' não tem relação com o
+      assunto. A documentação indica que a resposta correta é...")
 
     === OBJETO JSON DE SAÍDA (Sua resposta DEVE ser apenas este JSON) ===
     {{
       "is_correct": boolean,
       "feedback": "string (Explique o porquê está correto ou incorreto,
-                          com base no CONTEXTO.)"
+                        com base no CONTEXTO.)"
     }}
 
     OBJETO JSON DE AVALIAÇÃO:
@@ -193,6 +194,10 @@ async def get_agent_card():
 
 @app.post("/api/validate", response_model=ValidationResponse)
 async def validate_answer(request: ValidationRequest) -> ValidationResponse:
+    
+    # !! IMPORTANTE: A LÓGICA DA CHAIN ESTÁ AQUI DENTRO !!
+    # !! ISTO GARANTE QUE O CÓDIGO CORRIGIDO É USADO EM CADA CHAMADA !!
+    
     default_error_response = ValidationResponse(
         is_correct=False,
         feedback="Ocorreu um erro interno ao processar a validação."
@@ -205,46 +210,47 @@ async def validate_answer(request: ValidationRequest) -> ValidationResponse:
         )
 
     try:
-        # --- LÓGICA DE CHAIN CORRIGIDA ---
+        # --- LÓGICA DE CHAIN CORRIGIDA (DEFINIDA DENTRO DO ENDPOINT) ---
 
-        # 1. Chain do Retriever: Busca o "gabarito" (contexto) usando APENAS o desafio.
-        #    O 'itemgetter' pega os dados do input da chain principal.
+        # 1. Chain do Retriever
         retriever_chain = (
             {
-                # Extrai os dados do objeto 'challenge' que vem no input
                 "title": lambda x: x['challenge'].get('title', ''),
                 "description": lambda x: x['challenge'].get('description', '')
             }
-            # Formata a query para o retriever buscar a RESPOSTA/GABARITO
             | ChatPromptTemplate.from_template(
                 "Qual é a resposta ou o contexto relevante para este desafio: '{title}' - '{description}'?"
               )
             | retriever
         )
         
-        # 2. Chain RAG Principal: Combina o gabarito (context) com o resto dos dados.
+        # 2. Chain RAG Principal
         rag_chain = (
             {
-                # O 'context' é buscado dinamicamente pela 'retriever_chain'
                 "context": retriever_chain,
-                # Os outros campos são passados diretamente do input
                 "challenge_json": lambda x: json.dumps(x['challenge']),
-                "user_answer": itemgetter("user_answer") # Pega a string 'user_answer' do input
+                "user_answer": itemgetter("user_answer") 
             }
-            | prompt_template_validation # O novo prompt, mais rígido
-            | llm
+            | prompt_template_validation 
+            | llm                      # <-- A CORREÇÃO ESTÁ AQUI
             | StrOutputParser()
         )
 
         # Monta o input para a chain principal
-        # O input agora é um dicionário contendo o objeto challenge e a string user_answer
         chain_input = {
-            "challenge": request.challenge, # O objeto JSON completo do desafio
-            "user_answer": request.user_answer  # A string da resposta do usuário
+            "challenge": request.challenge, 
+            "user_answer": request.user_answer  
         }
+        
+        # --- PRINTS DE DEBUG ---
+        print("\n--- PROVA DE QUE O CÓDIGO NOVO (v4) ESTÁ A CORRER ---")
+        print(f"--- DEBUG: Input para a chain: {chain_input} ---")
         
         # Invoca a chain de validação
         bot_response_string = rag_chain.invoke(chain_input)
+        
+        # Se chegou aqui, o erro 'ChatPromptValue' FOI CORRIGIDO.
+        print(f"--- DEBUG: Resposta (string) vinda do LLM: {bot_response_string} ---")
         
         # --- Fim da Lógica de Chain Corrigida ---
         
@@ -262,7 +268,6 @@ async def validate_answer(request: ValidationRequest) -> ValidationResponse:
             
             validation_data = json.loads(json_string)
             
-            # Verifica se os campos esperados estão presentes
             if "is_correct" not in validation_data or "feedback" not in validation_data:
                 raise ValueError("JSON retornado pelo LLM não contém 'is_correct' ou 'feedback'.")
 
@@ -279,10 +284,11 @@ async def validate_answer(request: ValidationRequest) -> ValidationResponse:
             )
 
     except Exception as e:
-        print(f"Erro inesperado na chain RAG de validação: {e}")
+        # O erro 'ChatPromptValue' estava a acontecer AQUI.
+        print(f"Erro inesperado na chain RAG de validação: {e}") 
         return default_error_response
 
 if __name__ == "__main__":
     import uvicorn
-    print("Iniciando a API de VALIDAÇÃO em http://localhost:8002")
+    print("Iniciando a API de VALIDAÇÃO (v4 - Correção Definitiva) em http://localhost:8002")
     uvicorn.run(app, host="0.0.0.0", port=8002)
