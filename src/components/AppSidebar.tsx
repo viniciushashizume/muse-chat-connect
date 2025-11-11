@@ -17,7 +17,7 @@ import {
 const items = [
   { title: "Assistente RAG", url: "/", icon: MessageSquare },
   { title: "Desafios", url: "/area-selection", icon: Trophy },
-  { title: "Prova", url: "/area-selection?mode=exam", icon: ClipboardCheck },
+  { title: "Prova", url: "/exam", icon: ClipboardCheck },
   { title: "Sobre", url: "/about", icon: Info },
 ];
 

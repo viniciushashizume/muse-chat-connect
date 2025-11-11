@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -7,16 +7,24 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, CheckCircle2, XCircle, Loader2, Clock, AlertTriangle } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ArrowLeft, CheckCircle2, XCircle, Loader2, Clock, AlertTriangle, History } from "lucide-react";
 import { Challenge } from "@/types/challenge";
 import { generateChallenges, validateChallengeAnswer, ValidationApiResponse } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 
+interface ExamHistory {
+  id: string;
+  date: string;
+  score: number;
+  total: number;
+  percentage: number;
+  timeSpent: number;
+}
+
 export default function Exam() {
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const area = searchParams.get("area") || "";
 
   // Tempo limite em segundos (30 minutos = 1800 segundos)
   const EXAM_TIME_LIMIT = 1800;
@@ -30,7 +38,17 @@ export default function Exam() {
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [validationResults, setValidationResults] = useState<Record<number, ValidationApiResponse>>({});
   const [timeRemaining, setTimeRemaining] = useState(EXAM_TIME_LIMIT);
+  const [examHistory, setExamHistory] = useState<ExamHistory[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const examStartTime = useRef<number>(0);
+
+  // Load exam history from localStorage
+  useEffect(() => {
+    const savedHistory = localStorage.getItem("examHistory");
+    if (savedHistory) {
+      setExamHistory(JSON.parse(savedHistory));
+    }
+  }, []);
 
   // Timer effect
   useEffect(() => {
@@ -72,20 +90,28 @@ export default function Exam() {
     return "text-muted-foreground";
   };
 
-  const startExam = async () => {
-    if (!area) {
-      navigate("/area-selection");
-      return;
-    }
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 
+  const startExam = async () => {
     setIsLoadingExam(true);
     try {
-      const response = await generateChallenges(area);
+      // Gera desafios sobre conteúdos gerais do projeto
+      const response = await generateChallenges("conteúdos gerais do projeto");
       if (response.challenges && response.challenges.length > 0) {
         setQuestions(response.challenges);
         setExamStarted(true);
         setCurrentQuestion(0);
-        setTimeRemaining(EXAM_TIME_LIMIT); // Reset timer
+        setTimeRemaining(EXAM_TIME_LIMIT);
+        examStartTime.current = Date.now();
       } else {
         toast({
           title: "Erro",
@@ -94,9 +120,10 @@ export default function Exam() {
         });
       }
     } catch (error) {
+      console.error("Erro ao iniciar prova:", error);
       toast({
         title: "Erro",
-        description: "Erro ao carregar a prova.",
+        description: "Falha ao carregar a prova.",
         variant: "destructive",
       });
     } finally {
@@ -125,23 +152,52 @@ export default function Exam() {
     const results: Record<number, ValidationApiResponse> = {};
 
     try {
-      // Validate all answers
       for (let i = 0; i < questions.length; i++) {
+        const question = questions[i];
         const userAnswer = answers[i] || "";
-        const validation = await validateChallengeAnswer(questions[i], userAnswer);
-        results[i] = validation;
+        
+        try {
+          const validation = await validateChallengeAnswer(question, userAnswer);
+          results[i] = validation;
+        } catch (error) {
+          console.error(`Erro ao validar questão ${i}:`, error);
+          results[i] = {
+            is_correct: false,
+            feedback: "Erro ao validar esta questão."
+          };
+        }
       }
 
       setValidationResults(results);
       setExamFinished(true);
+      
+      // Calculate score and save to history
+      const correctCount = Object.values(results).filter(r => r.is_correct).length;
+      const percentage = (correctCount / questions.length) * 100;
+      const timeSpent = EXAM_TIME_LIMIT - timeRemaining;
+      
+      const newHistoryEntry: ExamHistory = {
+        id: Date.now().toString(),
+        date: new Date().toISOString(),
+        score: correctCount,
+        total: questions.length,
+        percentage,
+        timeSpent,
+      };
+
+      const updatedHistory = [newHistoryEntry, ...examHistory];
+      setExamHistory(updatedHistory);
+      localStorage.setItem("examHistory", JSON.stringify(updatedHistory));
+      
       toast({
-        title: "Prova finalizada!",
+        title: "Prova Concluída!",
         description: "Confira seus resultados abaixo.",
       });
     } catch (error) {
+      console.error("Erro ao submeter prova:", error);
       toast({
         title: "Erro",
-        description: "Erro ao validar as respostas. Tente novamente.",
+        description: "Falha ao submeter a prova.",
         variant: "destructive",
       });
     } finally {
@@ -166,11 +222,6 @@ export default function Exam() {
     setTimeRemaining(EXAM_TIME_LIMIT);
   };
 
-  if (!area) {
-    navigate("/area-selection");
-    return null;
-  }
-
   // Exam Results View
   if (examFinished) {
     const correctCount = getCorrectCount();
@@ -191,7 +242,7 @@ export default function Exam() {
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>Resultados da Prova</CardTitle>
-            <CardDescription>Área: {area}</CardDescription>
+            <CardDescription>Conteúdos Gerais do Projeto</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-center mb-6">
@@ -383,53 +434,108 @@ export default function Exam() {
 
   // Start Exam View
   return (
-    <div className="container mx-auto p-6 max-w-2xl">
-      <Button
-        variant="ghost"
-        onClick={() => navigate("/area-selection")}
-        className="mb-6"
-      >
+    <div className="container mx-auto p-6 max-w-4xl">
+      <Button onClick={() => navigate("/")} variant="ghost" className="mb-6">
         <ArrowLeft className="mr-2 h-4 w-4" />
         Voltar
       </Button>
+      
+      <Tabs defaultValue="start" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="start">Iniciar Prova</TabsTrigger>
+          <TabsTrigger value="history">
+            <History className="mr-2 h-4 w-4" />
+            Histórico
+          </TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="start">
+          <Card>
+            <CardHeader>
+              <CardTitle>Prova de Conhecimentos Gerais</CardTitle>
+              <CardDescription>
+                Teste seus conhecimentos sobre os conteúdos do projeto. Você terá 30 minutos para completar a prova.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <h3 className="font-semibold">Instruções:</h3>
+                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                  <li>A prova contém questões objetivas e dissertativas</li>
+                  <li>Você tem 30 minutos para completar todas as questões</li>
+                  <li>Todas as respostas serão validadas automaticamente</li>
+                  <li>Você pode navegar entre as questões livremente</li>
+                  <li>Ao finalizar, você verá sua pontuação e feedback detalhado</li>
+                </ul>
+              </div>
+              
+              <Button 
+                onClick={startExam} 
+                className="w-full"
+                disabled={isLoadingExam}
+              >
+                {isLoadingExam ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Carregando Prova...
+                  </>
+                ) : (
+                  "Iniciar Prova"
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Prova de Avaliação</CardTitle>
-          <CardDescription>Área: {area}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-muted-foreground">
-            Esta prova consiste em um questionário com questões objetivas, dissertativas e de código.
-            Ao final, você verá quantas questões acertou e receberá feedback detalhado do agente de validação.
-          </p>
-          <Alert>
-            <AlertDescription>
-              <strong>Instruções:</strong>
-              <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>Responda todas as questões com atenção</li>
-                <li>Você pode navegar entre as questões</li>
-                <li>Ao finalizar, suas respostas serão validadas automaticamente</li>
-              </ul>
-            </AlertDescription>
-          </Alert>
-          <Button
-            onClick={startExam}
-            disabled={isLoadingExam}
-            className="w-full"
-            size="lg"
-          >
-            {isLoadingExam ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Carregando prova...
-              </>
-            ) : (
-              "Iniciar Prova"
-            )}
-          </Button>
-        </CardContent>
-      </Card>
+        <TabsContent value="history">
+          <Card>
+            <CardHeader>
+              <CardTitle>Histórico de Provas</CardTitle>
+              <CardDescription>
+                Veja o histórico das suas provas anteriores
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {examHistory.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  Você ainda não realizou nenhuma prova.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {examHistory.map((entry) => (
+                    <Card key={entry.id} className="border-2">
+                      <CardContent className="pt-6">
+                        <div className="flex justify-between items-start">
+                          <div className="space-y-1">
+                            <p className="text-sm text-muted-foreground">
+                              {formatDate(entry.date)}
+                            </p>
+                            <p className="font-semibold">
+                              Pontuação: {entry.score}/{entry.total} ({entry.percentage.toFixed(1)}%)
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              Tempo gasto: {formatTime(entry.timeSpent)}
+                            </p>
+                          </div>
+                          <div className={`text-2xl font-bold ${
+                            entry.percentage >= 70 ? "text-success" : "text-destructive"
+                          }`}>
+                            {entry.percentage >= 70 ? (
+                              <CheckCircle2 className="h-8 w-8" />
+                            ) : (
+                              <XCircle className="h-8 w-8" />
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
