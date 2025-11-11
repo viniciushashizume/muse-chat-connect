@@ -8,6 +8,7 @@ import { ThemeProvider } from "next-themes";
 import { AppSidebar } from "@/components/AppSidebar";
 import Index from "./pages/Index";
 import Challenges from "./pages/Challenges";
+import Exam from "./pages/Exam";
 import AreaSelection from "./pages/AreaSelection";
 import About from "./pages/About";
 import NotFound from "./pages/NotFound";

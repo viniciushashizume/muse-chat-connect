@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Code2, Cpu, ArrowRight } from "lucide-react";
@@ -12,12 +12,15 @@ type ProjectType = "syna" | "dog-feeder" | "placeholder";
 
 export default function AreaSelection() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const mode = searchParams.get("mode") || "challenges";
   const [category, setCategory] = useState<AreaCategory>(null);
   const [selectedArea, setSelectedArea] = useState<string>("");
 
   const handleContinue = () => {
     if (selectedArea) {
-      navigate(`/challenges?area=${selectedArea}`);
+      const targetPath = mode === "exam" ? "/exam" : "/challenges";
+      navigate(`${targetPath}?area=${encodeURIComponent(selectedArea)}`);
     }
   };
 
@@ -26,10 +29,13 @@ export default function AreaSelection() {
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
         <div className="container px-4 py-4">
           <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-            Escolha sua Área de Aprendizado
+            {mode === "exam" ? "Escolha a Área da Prova" : "Escolha sua Área de Aprendizado"}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Selecione a área que deseja desenvolver
+            {mode === "exam" 
+              ? "Selecione a área que deseja ser avaliado"
+              : "Selecione a área que deseja desenvolver"
+            }
           </p>
         </div>
       </header>
@@ -137,7 +143,7 @@ export default function AreaSelection() {
           {selectedArea && (
             <div className="flex justify-end mt-6">
               <Button onClick={handleContinue} size="lg">
-                Continuar para os Desafios
+                {mode === "exam" ? "Continuar para a Prova" : "Continuar para os Desafios"}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
