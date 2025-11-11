@@ -21,9 +21,13 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.schema.runnable import RunnablePassthrough
 from langchain.schema.output_parser import StrOutputParser
 
+
 # Carregue sua chave de API a partir de um arquivo .env (recomendado)
 from dotenv import load_dotenv
 load_dotenv()
+
+from collections import Counter
+import re
 
 # --- CONFIGURAÇÃO INICIAL E CARREGAMENTO DO MODELO ---
 model_name = "sentence-transformers/all-MiniLM-L6-v2"
@@ -41,7 +45,7 @@ except Exception as e:
     exit()
 
 # LLM para validação (temperatura baixa para ser um "juiz" rigoroso)
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.1) 
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.1) 
 
 lista_de_documentos_pdf = [
     "Documentação Syna.pdf",
@@ -191,102 +195,120 @@ async def get_agent_card():
     """
     return AGENT_CARD
 
-
 @app.post("/api/validate", response_model=ValidationResponse)
 async def validate_answer(request: ValidationRequest) -> ValidationResponse:
-    
-    # !! IMPORTANTE: A LÓGICA DA CHAIN ESTÁ AQUI DENTRO !!
-    # !! ISTO GARANTE QUE O CÓDIGO CORRIGIDO É USADO EM CADA CHAMADA !!
-    
-    default_error_response = ValidationResponse(
-        is_correct=False,
-        feedback="Ocorreu um erro interno ao processar a validação."
-    )
+    """
+    Validação determinística com heurísticas locais:
+    - multiple-choice: compara IDs
+    - essay: verifica sobreposição de tokens relevantes entre description/context e user_answer
+    - code: tenta comparar expectedOutput (se houver) ou recomenda revisão manual
+    """
 
-    if not retriever:
+    # Prints de debug (mantenha para inspeção)
+    print("\n--- DEBUG validate_answer: Entrada recebida ---")
+    print(f"challenge (preview): {json.dumps(request.challenge)[:1000]}")  # limita comprimento no log
+    print(f"user_answer: {request.user_answer}")
+
+    # Segurança: campos obrigatórios
+    if not isinstance(request.challenge, dict):
         return ValidationResponse(
             is_correct=False,
-            feedback="O sistema de busca (RAG) não foi inicializado."
+            feedback="Desafio inválido: 'challenge' deve ser um objeto JSON."
         )
 
-    try:
-        # --- LÓGICA DE CHAIN CORRIGIDA (DEFINIDA DENTRO DO ENDPOINT) ---
+    # Extraia campos com fallback
+    challenge_type = request.challenge.get("type", "").lower()
+    title = request.challenge.get("title", "")
+    description = request.challenge.get("description", "")
+    correct_id = request.challenge.get("correctOptionId", None)
+    expected_output = request.challenge.get("expectedOutput", None)
 
-        # 1. Chain do Retriever
-        retriever_chain = (
-            {
-                "title": lambda x: x['challenge'].get('title', ''),
-                "description": lambda x: x['challenge'].get('description', '')
-            }
-            | ChatPromptTemplate.from_template(
-                "Qual é a resposta ou o contexto relevante para este desafio: '{title}' - '{description}'?"
-              )
-            | retriever
-        )
-        
-        # 2. Chain RAG Principal
-        rag_chain = (
-            {
-                "context": retriever_chain,
-                "challenge_json": lambda x: json.dumps(x['challenge']),
-                "user_answer": itemgetter("user_answer") 
-            }
-            | prompt_template_validation 
-            | llm                      # <-- A CORREÇÃO ESTÁ AQUI
-            | StrOutputParser()
-        )
+    # função utilitária simples de limpeza / tokenização
+    def tokens_of(text):
+        if not text:
+            return []
+        text = text.lower()
+        text = re.sub(r"[^a-z0-9áéíóúãõâêîôûç\s]", " ", text)
+        toks = [t for t in text.split() if len(t) > 2]
+        return toks
 
-        # Monta o input para a chain principal
-        chain_input = {
-            "challenge": request.challenge, 
-            "user_answer": request.user_answer  
-        }
-        
-        # --- PRINTS DE DEBUG ---
-        print("\n--- PROVA DE QUE O CÓDIGO NOVO (v4) ESTÁ A CORRER ---")
-        print(f"--- DEBUG: Input para a chain: {chain_input} ---")
-        
-        # Invoca a chain de validação
-        bot_response_string = rag_chain.invoke(chain_input)
-        
-        # Se chegou aqui, o erro 'ChatPromptValue' FOI CORRIGIDO.
-        print(f"--- DEBUG: Resposta (string) vinda do LLM: {bot_response_string} ---")
-        
-        # --- Fim da Lógica de Chain Corrigida ---
-        
-        try:
-            # Limpeza
-            clean_response_string = bot_response_string.strip().lstrip("```json").rstrip("```").strip()
-            
-            json_start = clean_response_string.find('{')
-            json_end = clean_response_string.rfind('}')
-            
-            if json_start == -1 or json_end == -1 or json_end < json_start:
-                 raise json.JSONDecodeError("Nenhum objeto JSON válido encontrado.", clean_response_string, 0)
-                 
-            json_string = clean_response_string[json_start:json_end+1]
-            
-            validation_data = json.loads(json_string)
-            
-            if "is_correct" not in validation_data or "feedback" not in validation_data:
-                raise ValueError("JSON retornado pelo LLM não contém 'is_correct' ou 'feedback'.")
+    # ===== MULTIPLE-CHOICE (determinístico) =====
+    if challenge_type == "multiple-choice" or correct_id is not None:
+        # O usuário pode fornecer 'A'/'1' etc — padronize comparando strings
+        ua = str(request.user_answer).strip()
+        correct = str(correct_id).strip() if correct_id is not None else None
 
-            return ValidationResponse(
-                is_correct=validation_data["is_correct"],
-                feedback=validation_data["feedback"]
-            )
-        
-        except (json.JSONDecodeError, ValueError) as e:
-            print(f"Erro: LLM não retornou JSON de validação válido. Erro: {e}. Resposta:\n{bot_response_string}")
+        if correct is None:
             return ValidationResponse(
                 is_correct=False,
-                feedback="O assistente não conseguiu formatar a avaliação (JSON). Tente novamente."
+                feedback="Desafio sem 'correctOptionId' — impossível validar automaticamente."
             )
 
-    except Exception as e:
-        # O erro 'ChatPromptValue' estava a acontecer AQUI.
-        print(f"Erro inesperado na chain RAG de validação: {e}") 
-        return default_error_response
+        if ua == correct:
+            fb = f"Correto! A opção escolhida ('{ua}') é a mesma que o gabarito ('{correct}')."
+            return ValidationResponse(is_correct=True, feedback=fb)
+        else:
+            # opcional: tente mapear letras para índices (A->1) se o challenge usar '1','2' etc.
+            letter_map = {"a":"1","b":"2","c":"3","d":"4","1":"1","2":"2","3":"3","4":"4"}
+            mapped = letter_map.get(ua.lower(), ua)
+            if mapped == correct:
+                fb = f"Correto (após mapeamento). Você enviou '{ua}', mapeado para '{mapped}', que é o gabarito."
+                return ValidationResponse(is_correct=True, feedback=fb)
+            else:
+                fb = f"Incorreto. Você enviou '{ua}'; o gabarito é '{correct}'."
+                # opcional: citar trecho da descrição/gabarito se houver
+                return ValidationResponse(is_correct=False, feedback=fb)
+
+    # ===== ESSAY (heurística de sobreposição) =====
+    if challenge_type == "essay" or challenge_type == "open-answer":
+        desc_tokens = tokens_of(description)
+        ans_tokens = tokens_of(request.user_answer)
+        if not desc_tokens:
+            return ValidationResponse(
+                is_correct=False,
+                feedback="Não há contexto suficiente no desafio para avaliar automaticamente."
+            )
+
+        # Calcule overlap simples
+        desc_counter = Counter(desc_tokens)
+        common = set(desc_counter.keys()).intersection(set(ans_tokens))
+        overlap_ratio = len(common) / max(1, len(set(desc_counter.keys())))
+
+        print(f"DEBUG: tokens no gabarito: {len(set(desc_counter.keys()))}, tokens em comum: {len(common)}, overlap_ratio: {overlap_ratio:.2f}")
+
+        # thresholds (ajustáveis)
+        if overlap_ratio >= 0.45 and len(common) >= 3:
+            fb = ("Resposta plausivelmente correta. Termos-chave encontrados no texto: "
+                  + ", ".join(list(common)[:8]))
+            return ValidationResponse(is_correct=True, feedback=fb)
+        else:
+            fb = ("Resposta possivelmente incorreta ou incompleta. Foram encontrados poucos termos-chave em comum. "
+                  "Sugestão: inclua conceitos/termos presentes no enunciado, por exemplo: "
+                  + ", ".join(list(desc_counter.keys())[:6]))
+            return ValidationResponse(is_correct=False, feedback=fb)
+
+    # ===== CODE (heurística básica) =====
+    if challenge_type == "code" or expected_output is not None:
+        ua = str(request.user_answer)
+        if expected_output is not None:
+            if str(expected_output).strip() in ua:
+                fb = "Correto: o output esperado aparece na resposta (comparação por substring)."
+                return ValidationResponse(is_correct=True, feedback=fb)
+            else:
+                fb = ("Incorreto ou inconclusivo: o 'expectedOutput' não foi encontrado na resposta. "
+                      "Recomenda-se executar o código em ambiente de testes para validação completa.")
+                return ValidationResponse(is_correct=False, feedback=fb)
+        else:
+            return ValidationResponse(
+                is_correct=False,
+                feedback="Avaliação automática de 'code' sem 'expectedOutput' não é possível. Execute testes automatizados ou revise manualmente."
+            )
+
+    # ===== FALLBACK: tipo desconhecido =====
+    return ValidationResponse(
+        is_correct=False,
+        feedback="Tipo de desafio não reconhecido. Suporte apenas para 'multiple-choice', 'essay' e 'code' no momento."
+    )
 
 if __name__ == "__main__":
     import uvicorn
