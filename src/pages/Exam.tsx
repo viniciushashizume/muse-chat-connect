@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Loader2, Clock, AlertTriangle } from "lucide-react";
 import { Challenge } from "@/types/challenge";
 import { generateChallenges, validateChallengeAnswer, ValidationApiResponse } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -18,6 +18,9 @@ export default function Exam() {
   const { toast } = useToast();
   const area = searchParams.get("area") || "";
 
+  // Tempo limite em segundos (30 minutos = 1800 segundos)
+  const EXAM_TIME_LIMIT = 1800;
+
   const [isLoadingExam, setIsLoadingExam] = useState(false);
   const [isSubmittingExam, setIsSubmittingExam] = useState(false);
   const [examStarted, setExamStarted] = useState(false);
@@ -26,6 +29,48 @@ export default function Exam() {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [validationResults, setValidationResults] = useState<Record<number, ValidationApiResponse>>({});
+  const [timeRemaining, setTimeRemaining] = useState(EXAM_TIME_LIMIT);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Timer effect
+  useEffect(() => {
+    if (examStarted && !examFinished && timeRemaining > 0) {
+      timerRef.current = setInterval(() => {
+        setTimeRemaining((prev) => {
+          if (prev <= 1) {
+            // Tempo esgotado - submeter automaticamente
+            clearInterval(timerRef.current!);
+            toast({
+              title: "Tempo Esgotado!",
+              description: "A prova será submetida automaticamente.",
+              variant: "destructive",
+            });
+            submitExam();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => {
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+        }
+      };
+    }
+  }, [examStarted, examFinished, timeRemaining]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const getTimeColor = () => {
+    if (timeRemaining <= 60) return "text-destructive";
+    if (timeRemaining <= 300) return "text-yellow-600 dark:text-yellow-500";
+    return "text-muted-foreground";
+  };
 
   const startExam = async () => {
     if (!area) {
@@ -40,6 +85,7 @@ export default function Exam() {
         setQuestions(response.challenges);
         setExamStarted(true);
         setCurrentQuestion(0);
+        setTimeRemaining(EXAM_TIME_LIMIT); // Reset timer
       } else {
         toast({
           title: "Erro",
@@ -108,12 +154,16 @@ export default function Exam() {
   };
 
   const restartExam = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
     setExamStarted(false);
     setExamFinished(false);
     setQuestions([]);
     setCurrentQuestion(0);
     setAnswers({});
     setValidationResults({});
+    setTimeRemaining(EXAM_TIME_LIMIT);
   };
 
   if (!area) {
@@ -223,6 +273,34 @@ export default function Exam() {
 
     return (
       <div className="container mx-auto p-6 max-w-3xl">
+        {/* Timer Alert */}
+        {timeRemaining <= 300 && (
+          <Alert variant={timeRemaining <= 60 ? "destructive" : "default"} className="mb-4">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              {timeRemaining <= 60 
+                ? "Atenção! Menos de 1 minuto restante!" 
+                : "Atenção! Menos de 5 minutos restantes!"
+              }
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Timer Display */}
+        <Card className="mb-6 border-2">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className={`h-5 w-5 ${getTimeColor()}`} />
+                <span className="text-sm font-medium">Tempo Restante</span>
+              </div>
+              <div className={`text-2xl font-bold tabular-nums ${getTimeColor()}`}>
+                {formatTime(timeRemaining)}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="mb-6">
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm text-muted-foreground">
