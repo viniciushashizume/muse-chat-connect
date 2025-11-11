@@ -1,5 +1,5 @@
 # Nome sugerido para este arquivo: validation_agent.py
-# VERSÃO COM CORREÇÃO DEFINITIVA
+# VERSÃO COM CORREÇÃO DEFINITIVA (AGORA USANDO RAG/LLM PARA FEEDBACK)
 
 import os
 import requests
@@ -195,20 +195,24 @@ async def get_agent_card():
     """
     return AGENT_CARD
 
+# === FUNÇÃO MODIFICADA ===
 @app.post("/api/validate", response_model=ValidationResponse)
 async def validate_answer(request: ValidationRequest) -> ValidationResponse:
     """
-    Validação determinística com heurísticas locais:
-    - multiple-choice: compara IDs
-    - essay: verifica sobreposição de tokens relevantes entre description/context e user_answer
-    - code: tenta comparar expectedOutput (se houver) ou recomenda revisão manual
+    Validação RAG-based (LLM) para fornecer feedback explicativo.
     """
 
-    # Prints de debug (mantenha para inspeção)
-    print("\n--- DEBUG validate_answer: Entrada recebida ---")
-    print(f"challenge (preview): {json.dumps(request.challenge)[:1000]}")  # limita comprimento no log
+    print("\n--- DEBUG validate_answer (RAG-LLM): Entrada recebida ---")
+    print(f"challenge (preview): {json.dumps(request.challenge, indent=2)[:1000]}")  # limita comprimento no log
     print(f"user_answer: {request.user_answer}")
 
+    # Verifica se o RAG está pronto
+    if not retriever:
+        return ValidationResponse(
+            is_correct=False,
+            feedback="Desculpe, o sistema de RAG (Validação) não foi inicializado. Documentos não carregados."
+        )
+        
     # Segurança: campos obrigatórios
     if not isinstance(request.challenge, dict):
         return ValidationResponse(
@@ -216,101 +220,78 @@ async def validate_answer(request: ValidationRequest) -> ValidationResponse:
             feedback="Desafio inválido: 'challenge' deve ser um objeto JSON."
         )
 
-    # Extraia campos com fallback
-    challenge_type = request.challenge.get("type", "").lower()
-    title = request.challenge.get("title", "")
-    description = request.challenge.get("description", "")
-    correct_id = request.challenge.get("correctOptionId", None)
-    expected_output = request.challenge.get("expectedOutput", None)
+    # Para o LLM, o objeto JSON do desafio deve ser uma string formatada
+    challenge_json_string = json.dumps(request.challenge, ensure_ascii=False, indent=2)
+    
+    # O que o retriever deve buscar? O contexto do desafio + a resposta do usuário.
+    # Isso ajuda a encontrar os trechos mais relevantes da documentação.
+    search_query = request.challenge.get("description", "") + " " + request.user_answer
 
-    # função utilitária simples de limpeza / tokenização
-    def tokens_of(text):
-        if not text:
-            return []
-        text = text.lower()
-        text = re.sub(r"[^a-z0-9áéíóúãõâêîôûç\s]", " ", text)
-        toks = [t for t in text.split() if len(t) > 2]
-        return toks
-
-    # ===== MULTIPLE-CHOICE (determinístico) =====
-    if challenge_type == "multiple-choice" or correct_id is not None:
-        # O usuário pode fornecer 'A'/'1' etc — padronize comparando strings
-        ua = str(request.user_answer).strip()
-        correct = str(correct_id).strip() if correct_id is not None else None
-
-        if correct is None:
-            return ValidationResponse(
-                is_correct=False,
-                feedback="Desafio sem 'correctOptionId' — impossível validar automaticamente."
-            )
-
-        if ua == correct:
-            fb = f"Correto! A opção escolhida ('{ua}') é a mesma que o gabarito ('{correct}')."
-            return ValidationResponse(is_correct=True, feedback=fb)
-        else:
-            # opcional: tente mapear letras para índices (A->1) se o challenge usar '1','2' etc.
-            letter_map = {"a":"1","b":"2","c":"3","d":"4","1":"1","2":"2","3":"3","4":"4"}
-            mapped = letter_map.get(ua.lower(), ua)
-            if mapped == correct:
-                fb = f"Correto (após mapeamento). Você enviou '{ua}', mapeado para '{mapped}', que é o gabarito."
-                return ValidationResponse(is_correct=True, feedback=fb)
-            else:
-                fb = f"Incorreto. Você enviou '{ua}'; o gabarito é '{correct}'."
-                # opcional: citar trecho da descrição/gabarito se houver
-                return ValidationResponse(is_correct=False, feedback=fb)
-
-    # ===== ESSAY (heurística de sobreposição) =====
-    if challenge_type == "essay" or challenge_type == "open-answer":
-        desc_tokens = tokens_of(description)
-        ans_tokens = tokens_of(request.user_answer)
-        if not desc_tokens:
-            return ValidationResponse(
-                is_correct=False,
-                feedback="Não há contexto suficiente no desafio para avaliar automaticamente."
-            )
-
-        # Calcule overlap simples
-        desc_counter = Counter(desc_tokens)
-        common = set(desc_counter.keys()).intersection(set(ans_tokens))
-        overlap_ratio = len(common) / max(1, len(set(desc_counter.keys())))
-
-        print(f"DEBUG: tokens no gabarito: {len(set(desc_counter.keys()))}, tokens em comum: {len(common)}, overlap_ratio: {overlap_ratio:.2f}")
-
-        # thresholds (ajustáveis)
-        if overlap_ratio >= 0.45 and len(common) >= 3:
-            fb = ("Resposta plausivelmente correta. Termos-chave encontrados no texto: "
-                  + ", ".join(list(common)[:8]))
-            return ValidationResponse(is_correct=True, feedback=fb)
-        else:
-            fb = ("Resposta possivelmente incorreta ou incompleta. Foram encontrados poucos termos-chave em comum. "
-                  "Sugestão: inclua conceitos/termos presentes no enunciado, por exemplo: "
-                  + ", ".join(list(desc_counter.keys())[:6]))
-            return ValidationResponse(is_correct=False, feedback=fb)
-
-    # ===== CODE (heurística básica) =====
-    if challenge_type == "code" or expected_output is not None:
-        ua = str(request.user_answer)
-        if expected_output is not None:
-            if str(expected_output).strip() in ua:
-                fb = "Correto: o output esperado aparece na resposta (comparação por substring)."
-                return ValidationResponse(is_correct=True, feedback=fb)
-            else:
-                fb = ("Incorreto ou inconclusivo: o 'expectedOutput' não foi encontrado na resposta. "
-                      "Recomenda-se executar o código em ambiente de testes para validação completa.")
-                return ValidationResponse(is_correct=False, feedback=fb)
-        else:
-            return ValidationResponse(
-                is_correct=False,
-                feedback="Avaliação automática de 'code' sem 'expectedOutput' não é possível. Execute testes automatizados ou revise manualmente."
-            )
-
-    # ===== FALLBACK: tipo desconhecido =====
-    return ValidationResponse(
-        is_correct=False,
-        feedback="Tipo de desafio não reconhecido. Suporte apenas para 'multiple-choice', 'essay' e 'code' no momento."
+    # Definir a chain de validação
+    # Usamos os componentes que já foram carregados (llm, retriever, prompt)
+    validation_chain = (
+        {
+            "context": itemgetter("search_query") | retriever, # Usa a query para buscar
+            "challenge_json": itemgetter("challenge_json"),   # Passa a string JSON
+            "user_answer": itemgetter("user_answer")          # Passa a resposta do usuário
+        }
+        | prompt_template_validation
+        | llm
+        | StrOutputParser() # O LLM vai retornar uma string JSON
     )
+
+    try:
+        # Invocar a chain
+        raw_response = validation_chain.invoke({
+            "search_query": search_query,
+            "challenge_json": challenge_json_string,
+            "user_answer": request.user_answer
+        })
+
+        print(f"DEBUG: Resposta crua do LLM: {raw_response}")
+
+        # O LLM deve retornar um JSON string. Vamos limpá-lo e carregá-lo.
+        # Às vezes o LLM adiciona ```json ... ``` ao redor da resposta
+        json_str = raw_response
+        if "```json" in raw_response:
+            json_str = re.search(r"```json\s*([\s\S]+?)\s*```", raw_response).group(1).strip()
+        elif raw_response.strip().startswith("{") and raw_response.strip().endswith("}"):
+             json_str = raw_response.strip()
+        else:
+             # Se não for um JSON claro, algo deu errado no prompt
+             raise ValueError(f"A saída do LLM não foi um JSON esperado. Saída: {raw_response}")
+
+
+        # Tentar carregar o JSON
+        result_json = json.loads(json_str)
+
+        # Garantir que os campos esperados estão lá
+        if "is_correct" not in result_json or "feedback" not in result_json:
+            raise ValueError("JSON de saída do LLM está mal formatado. Faltando chaves 'is_correct' ou 'feedback'.")
+
+        # Retornar a resposta pydantic
+        # O feedback agora conterá a explicação detalhada gerada pelo LLM
+        return ValidationResponse(
+            is_correct=result_json["is_correct"],
+            feedback=result_json["feedback"]
+        )
+
+    except json.JSONDecodeError as e:
+        print(f"Erro de JSONDecodeError: {e}")
+        print(f"String com falha: {json_str}")
+        return ValidationResponse(
+            is_correct=False,
+            feedback=f"Ocorreu um erro ao processar a avaliação. A resposta do avaliador não foi um JSON válido. (Raw: {raw_response})"
+        )
+    except Exception as e:
+        print(f"Erro inesperado na chain de validação: {e}")
+        return ValidationResponse(
+            is_correct=False,
+            feedback=f"Ocorreu um erro inesperado durante a validação: {str(e)}"
+        )
+
 
 if __name__ == "__main__":
     import uvicorn
-    print("Iniciando a API de VALIDAÇÃO (v4 - Correção Definitiva) em http://localhost:8002")
+    print("Iniciando a API de VALIDAÇÃO (v4 - Agora com RAG/LLM) em http://localhost:8002")
     uvicorn.run(app, host="0.0.0.0", port=8002)
