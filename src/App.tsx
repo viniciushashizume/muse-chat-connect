@@ -11,6 +11,7 @@ import Challenges from "./pages/Challenges";
 import Exam from "./pages/Exam";
 import AreaSelection from "./pages/AreaSelection";
 import About from "./pages/About";
+import IDE from "./pages/IDE";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ const App = () => (
                   <Route path="/area-selection" element={<AreaSelection />} />
                   <Route path="/challenges" element={<Challenges />} />
                   <Route path="/exam" element={<Exam />} />
+                  <Route path="/ide" element={<IDE />} />
                   <Route path="/about" element={<About />} />
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />

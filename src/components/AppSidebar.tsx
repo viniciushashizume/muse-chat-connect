@@ -1,4 +1,4 @@
-import { MessageSquare, Trophy, Info, Moon, Sun, ClipboardCheck } from "lucide-react";
+import { MessageSquare, Trophy, Info, Moon, Sun, ClipboardCheck, Code2 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { NavLink } from "react-router-dom";
 import {
@@ -18,6 +18,7 @@ const items = [
   { title: "Assistente RAG", url: "/", icon: MessageSquare },
   { title: "Desafios", url: "/area-selection", icon: Trophy },
   { title: "Prova", url: "/exam", icon: ClipboardCheck },
+  { title: "IDE", url: "/ide", icon: Code2 },
   { title: "Sobre", url: "/about", icon: Info },
 ];
 
