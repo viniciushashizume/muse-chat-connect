@@ -7,7 +7,8 @@ from io import BytesIO
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Any, List # Importe List
+from typing import Any, List
+from operator import itemgetter # <<< ADICIONADO
 
 # Importações do LangChain
 from langchain_community.vectorstores import FAISS
@@ -93,14 +94,16 @@ app.add_middleware(
 
 class ChatRequest(BaseModel):
     message: str
+    num_questions: int = 3 # <<< MODIFICADO: Adicionado com padrão 3
 
 class ChallengeResponse(BaseModel):
-    challenges: List[Any] # Alterado de 'challenge: Any' para 'challenges: List[Any]'
+    challenges: List[Any] 
 
+# <<< INÍCIO DA MODIFICAÇÃO DO PROMPT >>>
 prompt_template_desafio = ChatPromptTemplate.from_template("""
     Você é um "Mestre de Desafios" e sua especialidade é criar desafios de múltipla escolha com base em documentações técnicas, formatando a saída como um array JSON.
 
-    Baseado no CONTEXTO (documentação) abaixo, crie 3 DESAFIOS ESPECÍFICOS sobre a ÁREA DE APRENDIZADO (TÓPICO) fornecida.
+    Baseado no CONTEXTO (documentação) abaixo, crie {num_questions} DESAFIOS ESPECÍFICOS sobre a ÁREA DE APRENDIZADO (TÓPICO) fornecida.
 
     ÁREA DE APRENDIZADO (TÓPICO):
     {question}
@@ -110,17 +113,17 @@ prompt_template_desafio = ChatPromptTemplate.from_template("""
 
     === REGRAS OBRIGATÓRIAS ===
     1.  **Base no Contexto:** Os desafios DEVEM ser 100% baseados no contexto fornecido.
-    2.  **Formato JSON OBRIGATÓRIO:** Sua resposta DEVE ser um único ARRAY JSON válido, contendo 3 objetos de desafio. NÃO inclua ```json ```.
-    3.  **SEMPRE CRIE 3 DESAFIOS.**
-    4.  **TIPO OBRIGATÓRIO: "multiple-choice"**: Todos os 3 desafios criados DEVEM ser do tipo "multiple-choice".
-    5.  **NÃO REPITA PERGUNTAS:** Garanta que os 3 desafios sejam diferentes entre si.
+    2.  **Formato JSON OBRIGATÓRIO:** Sua resposta DEVE ser um único ARRAY JSON válido, contendo {num_questions} objetos de desafio. NÃO inclua ```json ```.
+    3.  **SEMPRE CRIE {num_questions} DESAFIOS.**
+    4.  **TIPO OBRIGATÓRIO: "multiple-choice"**: Todos os {num_questions} desafios criados DEVEM ser do tipo "multiple-choice".
+    5.  **NÃO REPITA PERGUNTAS:** Garanta que os desafios sejam diferentes entre si.
     6.  **ESPECIFICIDADE (MUITO IMPORTANTE):**
         * Os desafios devem ser específicos sobre o TÓPICO ({question}).
         * Evite perguntas genéricas (ex: "O que é...?").
         * Crie perguntas sobre componentes, arquitetura, funcionalidades ou dados específicos descritos no contexto.
     7.  **REGRAS DE "multiple-choice":** Cada desafio deve ter 3 ou 4 opções em "options" e um "correctOptionId" válido.
 
-    === ESTRUTURA JSON ESPERADA (ARRAY DE 3 OBJETOS) ===
+    === ESTRUTURA JSON ESPERADA (ARRAY DE {num_questions} OBJETOS) ===
     [
       {{
         "id": "string",
@@ -137,8 +140,7 @@ prompt_template_desafio = ChatPromptTemplate.from_template("""
         "codeTemplate": null,
         "expectedOutput": null
       }},
-      {{ ... segundo desafio (multiple-choice) ... }},
-      {{ ... terceiro desafio (multiple-choice) ... }}
+      {{ ... etc, até {num_questions} desafios ... }}
     ]
     
     Se não for possível gerar desafios com o contexto, retorne um array com um objeto de erro:
@@ -146,9 +148,10 @@ prompt_template_desafio = ChatPromptTemplate.from_template("""
       {{"id": "error", "title": "Erro de Contexto", "description": "Não foi possível criar desafios sobre '{question}' com a documentação atual.", "type": "error", "difficulty": "none"}}
     ]
 
-    ARRAY JSON DE 3 DESAFIOS GERADOS:
+    ARRAY JSON DE {num_questions} DESAFIOS GERADOS:
 """)
-# Defina o Agent Card como um dicionário Python
+# <<< FIM DA MODIFICAÇÃO DO PROMPT >>>
+
 AGENT_CARD = {
   "a2a_version": "0.1.0",
   "id": "agent-challenge-generator-v1",
@@ -157,14 +160,15 @@ AGENT_CARD = {
   "capabilities": [
     {
       "id": "generate-multiple-choice",
-      "description": "Gera 3 desafios de múltipla escolha sobre um tópico.",
+      "description": "Gera N desafios de múltipla escolha sobre um tópico.", # MODIFICADO
       "type": "http",
-      "endpoint": "/api/challenge", # Endpoint existente
+      "endpoint": "/api/challenge", 
       "method": "POST",
       "request_schema": {
         "type": "object",
         "properties": {
-          "message": { "type": "string", "description": "O tópico (ex: 'Python', 'Syna')" }
+          "message": { "type": "string", "description": "O tópico (ex: 'Python', 'Syna')" },
+          "num_questions": { "type": "integer", "description": "Número de desafios a gerar (default: 3)" } # MODIFICADO
         },
         "required": ["message"]
       },
@@ -180,13 +184,9 @@ AGENT_CARD = {
 
 @app.get("/.well-known/agent.json", response_model=None)
 async def get_agent_card():
-    """
-    Endpoint de Descoberta do A2A Protocol.
-    Retorna o Agent Card que descreve as capacidades deste agente.
-    """
     return AGENT_CARD
 
-# --- ALTERAÇÃO: Endpoint atualizado para 'response_model=ChallengeResponse' e lógica de array ---
+# <<< INÍCIO DA MODIFICAÇÃO DA FUNÇÃO >>>
 @app.post("/api/challenge", response_model=ChallengeResponse)
 async def generate_challenge(request: ChatRequest) -> ChallengeResponse:
     error_challenge = {
@@ -197,17 +197,27 @@ async def generate_challenge(request: ChatRequest) -> ChallengeResponse:
 
     if not retriever:
         error_challenge["description"] = "O sistema de busca (RAG) não foi inicializado."
-        return ChallengeResponse(challenges=[error_challenge]) # Retorna array com erro
+        return ChallengeResponse(challenges=[error_challenge]) 
 
+    # MODIFICADO: A chain agora espera um dicionário com "message" e "num_questions"
     rag_chain = (
-        {"context": retriever, "question": RunnablePassthrough()}
+        {
+            "context": itemgetter("message") | retriever,
+            "question": itemgetter("message"),
+            "num_questions": itemgetter("num_questions")
+        }
         | prompt_template_desafio
         | llm
         | StrOutputParser()
     )
 
     try:
-        bot_response_string = rag_chain.invoke(request.message) 
+        # MODIFICADO: Passa o dicionário para o invoke
+        bot_response_string = rag_chain.invoke({
+            "message": request.message,
+            "num_questions": request.num_questions
+        })
+        
         try:
             # Limpeza
             clean_response_string = bot_response_string.strip().lstrip("```json").rstrip("```").strip()
@@ -222,15 +232,13 @@ async def generate_challenge(request: ChatRequest) -> ChallengeResponse:
             
             challenge_data = json.loads(json_string)
             
-            # --- ALTERAÇÃO: Verifica se é uma lista ---
             if not isinstance(challenge_data, list):
                  raise ValueError("JSON retornado pelo LLM não é um array (lista).")
 
-            # Se a lista estiver vazia ou contiver dados inválidos (opcional)
             if not challenge_data:
                 raise ValueError("LLM retornou um array vazio.")
 
-            return ChallengeResponse(challenges=challenge_data) # Retorna o array de desafios
+            return ChallengeResponse(challenges=challenge_data) 
         
         except json.JSONDecodeError as e:
             print(f"Erro: LLM não retornou ARRAY JSON válido. Erro: {e}. Resposta:\n{bot_response_string}")
@@ -245,6 +253,7 @@ async def generate_challenge(request: ChatRequest) -> ChallengeResponse:
         print(f"Erro inesperado na chain RAG: {e}")
         error_challenge["description"] = f"Erro interno no servidor: {e}"
         return ChallengeResponse(challenges=[error_challenge])
+# <<< FIM DA MODIFICAÇÃO DA FUNÇÃO >>>
 
 if __name__ == "__main__":
     import uvicorn

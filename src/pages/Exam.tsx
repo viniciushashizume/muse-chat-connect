@@ -101,11 +101,13 @@ export default function Exam() {
     });
   };
 
-  const startExam = async () => {
+const startExam = async () => {
     setIsLoadingExam(true);
     try {
       // Gera desafios sobre conteúdos gerais do projeto
-      const response = await generateChallenges("conteúdos gerais do projeto");
+      // <<< MODIFICADO: Passando 10 como segundo argumento >>>
+      const response = await generateChallenges("conteúdos gerais do projeto", 10);
+      
       if (response.challenges && response.challenges.length > 0) {
         setQuestions(response.challenges);
         setExamStarted(true);

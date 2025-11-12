@@ -36,7 +36,8 @@ export default function Challenges() {
     setCurrentChallengeIndex(0);
 
     try {
-      const response = await generateChallenges(selectedArea);
+      // <<< MODIFICADO: Passando 3 como segundo argumento >>>
+      const response = await generateChallenges(selectedArea, 3);
       const challengeList = response.challenges;
 
       if (challengeList && Array.isArray(challengeList) && challengeList.length > 0) {

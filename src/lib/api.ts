@@ -16,6 +16,7 @@ export const VALIDATION_ENDPOINT = `${VALIDATION_API_BASE_URL}/api/validate`;
 
 export interface ChatApiRequest {
   message: string;
+  num_questions?: number; // <<< ADICIONADO
 }
 
 export interface ChatApiResponse {
@@ -66,14 +67,16 @@ export async function sendChatMessage(message: string): Promise<string> {
 /**
  * Sends a topic to the Challenge Agent API and gets a challenge object.
  */
-export async function generateChallenges(topic: string): Promise<ChallengeApiResponse> {
+// <<< MODIFICADA A ASSINATURA DA FUNÇÃO >>>
+export async function generateChallenges(topic: string, numQuestions?: number): Promise<ChallengeApiResponse> {
   try {
     const response = await fetch(CHALLENGE_ENDPOINT, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ message: topic } as ChatApiRequest),
+      // <<< MODIFICADO O CORPO DA REQUISIÇÃO >>>
+      body: JSON.stringify({ message: topic, num_questions: numQuestions } as ChatApiRequest),
     });
 
     if (!response.ok) {
