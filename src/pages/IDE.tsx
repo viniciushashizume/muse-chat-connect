@@ -118,12 +118,12 @@ export default function IDE() {
       `);
 
       // Envolver o código do usuário em uma função assíncrona
-      const wrappedCode = `
-async def __user_code__():
-${code.split('\n').map(line => '    ' + line).join('\n')}
-
-await __user_code__()
-`;
+      const wrappedCode = [
+        'async def __user_code__():',
+        ...code.split('\n').map(line => '    ' + line),
+        '',
+        'await __user_code__()'
+      ].join('\n');
       
       // Executar código do usuário
       await pyodide.runPythonAsync(wrappedCode);
