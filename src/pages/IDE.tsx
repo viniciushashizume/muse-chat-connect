@@ -117,10 +117,13 @@ export default function IDE() {
         builtins.input = custom_input
       `);
 
+      // Adicionar await automaticamente antes de input()
+      const processedCode = code.replace(/(\s*)(\w+\s*=\s*)?input\(/g, '$1$2await input(');
+      
       // Envolver o código do usuário em uma função assíncrona
       const wrappedCode = [
         'async def __user_code__():',
-        ...code.split('\n').map(line => '    ' + line),
+        ...processedCode.split('\n').map(line => '    ' + line),
         '',
         'await __user_code__()'
       ].join('\n');
