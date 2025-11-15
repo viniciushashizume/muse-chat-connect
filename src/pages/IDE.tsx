@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Play, Trash2, Loader2, Terminal } from "lucide-react";
+import { Play, Trash2, Terminal, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import CodeMirror from '@uiw/react-codemirror';
+import { python } from '@codemirror/lang-python';
+import { oneDark } from '@codemirror/theme-one-dark';
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface ExecutionResult {
   code: string;
@@ -15,12 +19,18 @@ interface ExecutionResult {
 
 export default function IDE() {
   const { toast } = useToast();
-  const [code, setCode] = useState<string>("# Escreva seu código Python aqui\nprint('Hello, World!')");
+  const [code, setCode] = useState<string>("# Escreva seu código Python aqui\nprint('Hello, World!')\n\n# Experimente usar input:\n# nome = input('Digite seu nome: ')\n# print(f'Olá, {nome}!')");
   const [output, setOutput] = useState<string>("");
   const [isExecuting, setIsExecuting] = useState(false);
   const [isPyodideReady, setIsPyodideReady] = useState(false);
   const [history, setHistory] = useState<ExecutionResult[]>([]);
   const pyodideRef = useRef<any>(null);
+  
+  // Estados para input
+  const [showInputDialog, setShowInputDialog] = useState(false);
+  const [inputPrompt, setInputPrompt] = useState("");
+  const [inputValue, setInputValue] = useState("");
+  const inputResolveRef = useRef<((value: string) => void) | null>(null);
 
   // Inicializar Pyodide
   useEffect(() => {
@@ -31,7 +41,7 @@ export default function IDE() {
           indexURL: "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/",
         });
         
-        // Redirecionar stdout para capturar prints
+        // Configurar stdout e stdin
         await pyodide.runPythonAsync(`
           import sys
           from io import StringIO
@@ -57,6 +67,25 @@ export default function IDE() {
     loadPyodide();
   }, [toast]);
 
+  // Função para simular input() do Python
+  const handleInput = (prompt: string): Promise<string> => {
+    return new Promise((resolve) => {
+      setInputPrompt(prompt);
+      setInputValue("");
+      setShowInputDialog(true);
+      inputResolveRef.current = resolve;
+    });
+  };
+
+  const submitInput = () => {
+    if (inputResolveRef.current) {
+      inputResolveRef.current(inputValue);
+      inputResolveRef.current = null;
+    }
+    setShowInputDialog(false);
+    setInputValue("");
+  };
+
   // Executar código Python
   const executeCode = async () => {
     if (!isPyodideReady || !pyodideRef.current || !code.trim()) return;
@@ -70,6 +99,22 @@ export default function IDE() {
       // Limpar stdout anterior
       await pyodide.runPythonAsync(`
         sys.stdout = StringIO()
+      `);
+
+      // Interceptar chamadas de input()
+      pyodide.globals.set("js_input", handleInput);
+      
+      // Configurar input customizado
+      await pyodide.runPythonAsync(`
+        import builtins
+        import js
+        
+        async def custom_input(prompt=''):
+            result = await js.js_input(prompt)
+            print(prompt + result)
+            return result
+        
+        builtins.input = custom_input
       `);
 
       // Executar código do usuário
@@ -89,7 +134,7 @@ export default function IDE() {
         output: result,
         timestamp: new Date(),
       };
-      setHistory(prev => [executionResult, ...prev].slice(0, 10)); // Manter últimas 10 execuções
+      setHistory(prev => [executionResult, ...prev].slice(0, 10));
 
       toast({
         title: "Executado com sucesso",
@@ -117,17 +162,15 @@ export default function IDE() {
     }
   };
 
-  // Limpar console
   const clearConsole = () => {
     setOutput("");
   };
 
-  // Limpar histórico
   const clearHistory = () => {
     setHistory([]);
     toast({
       title: "Histórico limpo",
-      description: "Todo o histórico de execuções foi removido",
+      description: "Todas as execuções anteriores foram removidas",
     });
   };
 
@@ -135,55 +178,62 @@ export default function IDE() {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold mb-2">IDE Python</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-4xl font-bold">Python IDE</h1>
+          <p className="text-muted-foreground mt-2">
             Execute código Python diretamente no navegador
           </p>
         </div>
-        {isPyodideReady && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            Python pronto
+        {isPyodideReady ? (
+          <div className="flex items-center gap-2 text-green-600">
+            <Terminal className="h-5 w-5" />
+            <span className="font-medium">Python Pronto</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span>Carregando Python...</span>
           </div>
         )}
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Editor */}
-        <Card>
+        <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Editor</CardTitle>
-            <CardDescription>
-              Escreva seu código Python aqui
-            </CardDescription>
+            <CardTitle>Editor de Código</CardTitle>
+            <CardDescription>Escreva seu código Python aqui</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Textarea
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="# Escreva seu código Python aqui"
-              className="font-mono min-h-[400px] text-sm"
-              disabled={!isPyodideReady}
-            />
-            
+            <div className="border rounded-lg overflow-hidden">
+              <CodeMirror
+                value={code}
+                height="400px"
+                theme={oneDark}
+                extensions={[python()]}
+                onChange={(value) => setCode(value)}
+                className="text-base"
+              />
+            </div>
             <div className="flex gap-2">
-              <Button 
-                onClick={executeCode} 
-                disabled={isExecuting || !isPyodideReady || !code.trim()}
+              <Button
+                onClick={executeCode}
+                disabled={!isPyodideReady || isExecuting}
                 className="flex-1"
               >
                 {isExecuting ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Executando...
+                  </>
                 ) : (
-                  <Play className="mr-2 h-4 w-4" />
+                  <>
+                    <Play className="mr-2 h-4 w-4" />
+                    Executar Código
+                  </>
                 )}
-                Executar
               </Button>
-              
-              <Button 
-                onClick={clearConsole} 
-                variant="outline"
-              >
+              <Button variant="outline" onClick={clearConsole}>
+                <Trash2 className="mr-2 h-4 w-4" />
                 Limpar Console
               </Button>
             </div>
@@ -194,13 +244,11 @@ export default function IDE() {
         <Card>
           <CardHeader>
             <CardTitle>Console</CardTitle>
-            <CardDescription>
-              Saída da execução do código
-            </CardDescription>
+            <CardDescription>Saída da execução</CardDescription>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="h-[460px]">
-              <pre className="bg-muted p-4 rounded-md text-sm font-mono whitespace-pre-wrap">
+            <ScrollArea className="h-[400px] w-full rounded-md border bg-black/90 p-4">
+              <pre className="text-sm text-green-400 font-mono whitespace-pre-wrap">
                 {output || "Aguardando execução..."}
               </pre>
             </ScrollArea>
@@ -209,58 +257,107 @@ export default function IDE() {
       </div>
 
       {/* Histórico */}
-      {history.length > 0 && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Histórico de Execuções</CardTitle>
-                <CardDescription>
-                  Últimas {history.length} execuções
-                </CardDescription>
-              </div>
-              <Button 
-                onClick={clearHistory} 
-                variant="outline"
-                size="sm"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Limpar
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-[300px]">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Histórico de Execuções</CardTitle>
+            <CardDescription>Últimas 10 execuções de código</CardDescription>
+          </div>
+          {history.length > 0 && (
+            <Button variant="outline" size="sm" onClick={clearHistory}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Limpar Histórico
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          {history.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">
+              Nenhuma execução ainda. Execute um código para ver o histórico.
+            </p>
+          ) : (
+            <ScrollArea className="h-[400px]">
               <div className="space-y-4">
-                {history.map((result, index) => (
-                  <div key={index} className="border rounded-lg p-4 space-y-2">
-                    <div className="flex items-center justify-between text-sm text-muted-foreground">
-                      <span className="flex items-center gap-2">
-                        <Terminal className="h-3 w-3" />
-                        {result.timestamp.toLocaleTimeString()}
-                      </span>
-                      {result.error && (
-                        <span className="text-destructive text-xs">Erro</span>
-                      )}
-                    </div>
-                    
-                    <pre className="bg-muted p-2 rounded text-xs font-mono overflow-x-auto">
-                      {result.code}
-                    </pre>
-                    
-                    <div className="bg-background border rounded p-2">
-                      <p className="text-xs text-muted-foreground mb-1">Saída:</p>
-                      <pre className="text-xs font-mono whitespace-pre-wrap">
-                        {result.error ? `Erro: ${result.error}` : result.output}
-                      </pre>
-                    </div>
-                  </div>
+                {history.map((item, index) => (
+                  <Card key={index} className={item.error ? "border-destructive" : ""}>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm">
+                          Execução #{history.length - index}
+                        </CardTitle>
+                        <span className="text-xs text-muted-foreground">
+                          {item.timestamp.toLocaleTimeString()}
+                        </span>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Código:</p>
+                        <div className="border rounded-md overflow-hidden">
+                          <CodeMirror
+                            value={item.code}
+                            height="auto"
+                            maxHeight="150px"
+                            theme={oneDark}
+                            extensions={[python()]}
+                            editable={false}
+                            basicSetup={{
+                              lineNumbers: false,
+                              foldGutter: false,
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">
+                          {item.error ? "Erro:" : "Saída:"}
+                        </p>
+                        <pre
+                          className={`text-xs p-2 rounded-md border font-mono whitespace-pre-wrap ${
+                            item.error
+                              ? "bg-destructive/10 text-destructive"
+                              : "bg-muted"
+                          }`}
+                        >
+                          {item.error || item.output}
+                        </pre>
+                      </div>
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
             </ScrollArea>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Dialog para input() */}
+      <Dialog open={showInputDialog} onOpenChange={setShowInputDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Entrada Requerida</DialogTitle>
+            <DialogDescription>
+              {inputPrompt || "Digite um valor:"}
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                submitInput();
+              }
+            }}
+            placeholder="Digite aqui..."
+            autoFocus
+          />
+          <DialogFooter>
+            <Button onClick={submitInput}>
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
