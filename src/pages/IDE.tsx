@@ -117,8 +117,16 @@ export default function IDE() {
         builtins.input = custom_input
       `);
 
+      // Envolver o código do usuário em uma função assíncrona
+      const wrappedCode = `
+async def __user_code__():
+${code.split('\n').map(line => '    ' + line).join('\n')}
+
+await __user_code__()
+`;
+      
       // Executar código do usuário
-      await pyodide.runPythonAsync(code);
+      await pyodide.runPythonAsync(wrappedCode);
       
       // Capturar output
       const stdout = await pyodide.runPythonAsync(`
