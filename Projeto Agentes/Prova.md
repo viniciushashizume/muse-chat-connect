@@ -3,3 +3,4 @@ Sistema que vai classificar o aluno, vai usar o agente gerador de perguntas, par
 Implementar:
 * Um compilador usando [[MCP do Colab]]
 * Aleatorizar entre questões objetivas, dissertativas ou de implementação por lógica de programação. 
+*  Impleentar [[Qdrant]] para o Vector Database

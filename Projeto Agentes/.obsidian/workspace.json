@@ -4,11 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "4d529a6ef67338ce",
+        "id": "e54cc3b4bcb1c253",
         "type": "tabs",
         "children": [
           {
-            "id": "1138bdba8d921416",
+            "id": "887fc0b708840c7d",
             "type": "leaf",
             "state": {
               "type": "graph",
@@ -162,8 +162,9 @@
       "bases:Create new base": false
     }
   },
-  "active": "1138bdba8d921416",
+  "active": "887fc0b708840c7d",
   "lastOpenFiles": [
+    "Untitled.canvas",
     "Prova.md",
     "Agente de Validação.md",
     "Método de Otimização.md",
