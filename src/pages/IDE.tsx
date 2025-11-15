@@ -27,11 +27,13 @@ export default function IDE() {
   const pyodideRef = useRef<any>(null);
   
   // Estados para input
-  const [showInputDialog, setShowInputDialog] = useState(false);
+  /*const [showInputDialog, setShowInputDialog] = useState(false);
   const [inputPrompt, setInputPrompt] = useState("");
   const [inputValue, setInputValue] = useState("");
+  const inputResolveRef = useRef<((value: string) => void) | null>(null);*/
+  const [isWaitingForInput, setIsWaitingForInput] = useState(false);
+  const [currentInputValue, setCurrentInputValue] = useState("");
   const inputResolveRef = useRef<((value: string) => void) | null>(null);
-
   // Inicializar Pyodide
   useEffect(() => {
     const loadPyodide = async () => {
@@ -70,21 +72,30 @@ export default function IDE() {
   // Função para simular input() do Python
   const handleInput = (prompt: string): Promise<string> => {
     return new Promise((resolve) => {
-      setInputPrompt(prompt);
-      setInputValue("");
-      setShowInputDialog(true);
+      // Adiciona o prompt (ex: "Digite seu nome: ") ao console
+      setOutput(prev => prev + prompt);
+      
+      // Ativa o modo "esperando por input"
+      setIsWaitingForInput(true);
+      setCurrentInputValue(""); // Limpa o input anterior
       inputResolveRef.current = resolve;
     });
   };
 
-  const submitInput = () => {
-    if (inputResolveRef.current) {
-      inputResolveRef.current(inputValue);
-      inputResolveRef.current = null;
-    }
-    setShowInputDialog(false);
-    setInputValue("");
-  };
+const handleConsoleSubmit = (value: string) => {
+  if (inputResolveRef.current) {
+    // 1. Adiciona o valor que o usuário digitou ao console
+    setOutput(prev => prev + value + "\n");
+    
+    // 2. Resolve a Promise do Python com o valor
+    inputResolveRef.current(value);
+    inputResolveRef.current = null;
+    
+    // 3. Desativa o modo "esperando por input"
+    setIsWaitingForInput(false);
+    setCurrentInputValue("");
+  }
+};
 
   // Executar código Python
   const executeCode = async () => {
@@ -105,17 +116,19 @@ export default function IDE() {
       pyodide.globals.set("js_input", handleInput);
       
       // Configurar input customizado
-      await pyodide.runPythonAsync(`
-        import builtins
-        import js
-        
-        async def custom_input(prompt=''):
-            result = await js.js_input(prompt)
-            print(prompt + result)
-            return result
-        
-        builtins.input = custom_input
-      `);
+    await pyodide.runPythonAsync(`
+      import builtins
+      import js
+      
+      async def custom_input(prompt=''):
+          # O 'js_input' (nosso handleInput) já mostra o prompt
+          result = await js_input(prompt)
+          # O 'handleConsoleSubmit' já mostra o 'result' (eco)
+          # Então não fazemos NENHUM print aqui.
+          return result
+      
+      builtins.input = custom_input
+    `);
 
       // Adicionar await automaticamente antes de input()
       const processedCode = code.replace(/(\s*)(\w+\s*=\s*)?input\(/g, '$1$2await input(');
@@ -252,19 +265,48 @@ export default function IDE() {
         </Card>
 
         {/* Console */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Console</CardTitle>
-            <CardDescription>Saída da execução</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-[400px] w-full rounded-md border bg-black/90 p-4">
-              <pre className="text-sm text-green-400 font-mono whitespace-pre-wrap">
-                {output || "Aguardando execução..."}
-              </pre>
-            </ScrollArea>
-          </CardContent>
-        </Card>
+<Card>
+  <CardHeader>
+    <CardTitle>Console</CardTitle>
+    <CardDescription>Saída da execução</CardDescription>
+  </CardHeader>
+  <CardContent>
+    {/* Altura foi diminuída para (ex) 360px para caber o input abaixo */}
+    <ScrollArea className="h-[360px] w-full rounded-md border bg-black/90 p-4">
+      <pre className="text-sm text-green-400 font-mono whitespace-pre-wrap">
+        {output || "Aguardando execução..."}
+        {isWaitingForInput && (
+          // Simula um cursor de terminal piscando
+          <span className="animate-pulse">_</span>
+        )}
+      </pre>
+    </ScrollArea>
+    
+    {/* Este é o novo "Input" que aparece no console
+      quando o isWaitingForInput é true.
+    */}
+    <div className="mt-2">
+      {isWaitingForInput ? (
+        <Input
+          value={currentInputValue}
+          onChange={(e) => setCurrentInputValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleConsoleSubmit(e.currentTarget.value);
+            }
+          }}
+          placeholder="Digite sua entrada e pressione Enter..."
+          autoFocus
+          className="bg-black/90 text-green-400 border-green-700 font-mono placeholder:text-gray-600"
+        />
+      ) : (
+        // Um espaçador para manter o layout consistente
+        <div className="h-[40px]" />
+      )}
+    </div>
+  </CardContent>
+</Card>
       </div>
 
       {/* Histórico */}
@@ -342,33 +384,7 @@ export default function IDE() {
         </CardContent>
       </Card>
 
-      {/* Dialog para input() */}
-      <Dialog open={showInputDialog} onOpenChange={setShowInputDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Entrada Requerida</DialogTitle>
-            <DialogDescription>
-              {inputPrompt || "Digite um valor:"}
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                submitInput();
-              }
-            }}
-            placeholder="Digite aqui..."
-            autoFocus
-          />
-          <DialogFooter>
-            <Button onClick={submitInput}>
-              Confirmar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      
     </div>
   );
 }
